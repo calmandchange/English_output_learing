@@ -11,59 +11,207 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
 }
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+  min-width: 360px;
+  min-height: 400px;
+}
+
+.container {
+  padding: 1rem;
 }
 
 h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+  font-size: 1.4em;
+  margin: 0.5em 0;
+}
+
+h2 {
+  font-size: 1.1em;
+  margin: 0 0 0.8em 0;
+}
+
+/* Tab 样式 */
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 1rem;
+  justify-content: center;
+}
+
+.tab {
+  padding: 8px 16px;
+  border: 1px solid #444;
+  background: transparent;
+  color: #888;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.tab:hover {
+  border-color: #666;
+  color: #aaa;
+}
+
+.tab.active {
+  background: #007bff;
+  border-color: #007bff;
+  color: white;
+}
+
+/* 表单样式 */
+.form-group {
+  margin-bottom: 1rem;
+  text-align: left;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.9rem;
+  color: #aaa;
+}
+
+.form-group select,
+.form-group input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background: #1a1a1a;
+  color: white;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.form-group select:focus,
+.form-group input:focus {
+  outline: none;
+  border-color: #007bff;
+}
+
+.hint {
+  font-size: 0.75rem;
+  color: #666;
+  margin: 0.3rem 0 0 0;
 }
 
 button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
+  padding: 10px 24px;
+  border: none;
+  border-radius: 6px;
+  background: #007bff;
+  color: white;
+  font-size: 14px;
   cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+  transition: background 0.2s ease;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+button:hover {
+  background: #0056b3;
+}
+
+.status {
+  color: #4ade80;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+/* 历史记录样式 */
+.history-card {
+  text-align: left;
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.8rem;
+}
+
+.history-header h2 {
+  margin: 0;
+}
+
+.clear-btn {
+  padding: 4px 12px;
+  font-size: 12px;
+  background: #dc3545;
+}
+
+.clear-btn:hover {
+  background: #c82333;
+}
+
+.empty-hint {
+  color: #666;
+  text-align: center;
+  padding: 2rem 0;
+}
+
+.history-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid #333;
+  gap: 12px;
+}
+
+.history-item:last-child {
+  border-bottom: none;
+}
+
+.english-text {
+  flex: 1;
+  font-size: 14px;
+  color: #e0e0e0;
+  word-break: break-word;
+}
+
+.count-badge {
+  flex-shrink: 0;
+  background: #007bff33;
+  color: #66b3ff;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* 卡片样式 */
+.card {
+  background: #1a1a1a;
+  border-radius: 10px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+/* Footer */
+.footer {
+  margin-top: 1rem;
+  color: #666;
+  font-size: 0.8rem;
+}
+
+.footer p {
+  margin: 0;
+}
+
+.loading {
+  padding: 2rem;
+  text-align: center;
+  color: #888;
 }

@@ -10,6 +10,214 @@ const logger = {
     warn: (msg: string, ...args: any[]) => console.warn(`[InputListener] ${msg}`, ...args),
 };
 
+/**
+ * 获取 contenteditable 元素的文本内容
+ */
+function getContentEditableText(element: HTMLElement): string {
+    return element.innerText || element.textContent || '';
+}
+
+/**
+ * 设置 contenteditable 元素的文本内容
+ * 使用浏览器原生 API 模拟用户操作（适用于 Lexical 等富文本编辑器）
+ * @param element - 目标元素
+ * @param text - 要设置的文本（空字符串表示清空）
+ */
+async function setContentEditableText(element: HTMLElement, text: string): Promise<void> {
+    logger.log("setContentEditableText 开始", { text, 清空前内容: getContentEditableText(element) });
+
+    try {
+        // 保存当前焦点状态
+        const wasFocused = document.activeElement === element;
+
+        // 1. 确保元素聚焦（避免重复聚焦导致事件抖动）
+        if (!wasFocused) {
+            element.focus();
+            // 使用 RAF 延迟后续操作，让焦点事件完成
+            await new Promise(resolve => requestAnimationFrame(resolve));
+        }
+
+        // 检测是否为 Lexical 编辑器
+        const isLexical = element.dataset.lexicalEditor === 'true' ||
+            element.querySelector('[data-lexical-text="true"]') !== null;
+
+        logger.log("编辑器类型检测:", { isLexical });
+
+        if (isLexical) {
+            // === Lexical 编辑器：使用键盘模拟清空 ===
+            logger.log("清空 Lexical 编辑器 - 模拟 Ctrl+A + Backspace");
+
+            element.focus();
+            await new Promise(resolve => setTimeout(resolve, 30));
+
+            // 模拟 Ctrl+A (全选)
+            element.dispatchEvent(new KeyboardEvent('keydown', {
+                key: 'a',
+                code: 'KeyA',
+                ctrlKey: true,
+                bubbles: true,
+                cancelable: true
+            }));
+
+            await new Promise(resolve => setTimeout(resolve, 10));
+
+            // 模拟 Backspace (删除)
+            element.dispatchEvent(new KeyboardEvent('keydown', {
+                key: 'Backspace',
+                code: 'Backspace',
+                bubbles: true,
+                cancelable: true
+            }));
+
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // 验证是否清空
+            let currentContent = getContentEditableText(element);
+            logger.log("Lexical 清空后验证，当前内容:", currentContent);
+
+            // 如果键盘模拟失败，强制清空 DOM
+            if (currentContent.trim() !== '') {
+                logger.warn("键盘模拟失败，强制清空 DOM");
+                element.innerHTML = '<p class="first:mt-0 last:mb-0" dir="auto"><br></p>';
+                element.dispatchEvent(new Event('input', { bubbles: true }));
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+
+        } else {
+            // === 普通 contenteditable 处理 ===
+            logger.log("清空普通 contenteditable 元素");
+
+            // 直接清空 DOM
+            while (element.firstChild) {
+                element.removeChild(element.firstChild);
+            }
+
+            await new Promise(resolve => setTimeout(resolve, 30));
+        }
+
+        // 设置新内容
+        if (text) {
+            // 对于 Lexical，使用 execCommand 插入文本
+            if (isLexical) {
+                document.execCommand('insertText', false, text);
+            } else {
+                element.textContent = text;
+            }
+        }
+
+        // 触发 input 事件让框架感知变化
+        element.dispatchEvent(new InputEvent('input', {
+            bubbles: true,
+            inputType: text ? 'insertText' : 'deleteContentBackward',
+            data: text || null
+        }));
+
+        // 确保焦点仍在元素上（使用 RAF 避免抖动）
+        if (wasFocused || document.activeElement !== element) {
+            requestAnimationFrame(() => {
+                if (document.activeElement !== element) {
+                    element.focus();
+                }
+            });
+        }
+
+        logger.log("setContentEditableText 完成，最终内容:", getContentEditableText(element));
+
+    } catch (error) {
+        logger.warn("setContentEditableText 错误:", error);
+        throw error;
+    }
+}
+
+/**
+ * 处理 contenteditable 元素的整句翻译
+ */
+async function handleContentEditableSentenceTranslation(target: HTMLElement) {
+    const text = getContentEditableText(target).trimEnd();
+    logger.log("Processing Contenteditable Sentence Translation", { text });
+
+    if (!text.trim()) {
+        logger.log("Empty text, skipping.");
+        return;
+    }
+
+    // 显示加载动画
+    useTranslationStore.getState().setLoading(true, target);
+
+    try {
+        const result = await translateText(text);
+        logger.log("Translation Result:", result);
+
+        // 关闭加载状态
+        useTranslationStore.getState().setLoading(false);
+
+        // 清空输入框
+        await setContentEditableText(target, '');
+        target.focus();
+
+        // 显示 ghost text
+        logger.log("Showing ghost text (Contenteditable Sentence Mode):", { text: result.translatedText });
+        useTranslationStore.getState().show(result.translatedText, target, 0);
+        recordTranslation(text, result.translatedText);
+    } catch (err) {
+        logger.warn("Contenteditable Translation failed", err);
+        useTranslationStore.getState().setNetworkError(true, target);
+    }
+}
+
+/**
+ * 处理 contenteditable 元素的单词翻译
+ */
+async function handleContentEditableWordTranslation(target: HTMLElement) {
+    const fullText = getContentEditableText(target);
+    const cleanText = fullText.trimEnd();
+    const segments = cleanText.split(' ');
+    const textToTranslate = segments[segments.length - 1];
+
+    logger.log("Processing Contenteditable Word Translation", { fullText, textToTranslate });
+
+    const hasChinese = /[\u4e00-\u9fa5]/.test(textToTranslate);
+    if (!textToTranslate.trim() || !hasChinese) {
+        logger.log("Skipping: No Chinese detected or empty text.");
+        return;
+    }
+
+    // 显示加载动画
+    useTranslationStore.getState().setLoading(true, target);
+
+    try {
+        const result = await translateText(textToTranslate);
+        logger.log("Word Translation Result:", result);
+
+        // 关闭加载状态
+        useTranslationStore.getState().setLoading(false);
+
+        // 删除最后一个中文词，保留前面的内容
+        const beforeLastWord = segments.slice(0, -1).join(' ');
+        const newText = beforeLastWord ? beforeLastWord + ' ' : '';
+        await setContentEditableText(target, newText);
+        target.focus();
+
+        // 将光标移到末尾
+        const selection = window.getSelection();
+        if (selection && target.childNodes.length > 0) {
+            const range = document.createRange();
+            range.selectNodeContents(target);
+            range.collapse(false);
+            selection.removeAllRanges();
+            selection.addRange(range);
+        }
+
+        // 显示 ghost text
+        logger.log("Showing ghost text (Contenteditable Word Mode):", { text: result.translatedText });
+        useTranslationStore.getState().show(result.translatedText, target, newText.length);
+        recordTranslation(textToTranslate, result.translatedText);
+    } catch (err) {
+        logger.warn("Contenteditable Word Translation failed", err);
+        useTranslationStore.getState().setNetworkError(true, target);
+    }
+}
+
 export function setupInputListeners() {
     logger.log("Setting up input listeners...");
     window.addEventListener('keydown', handleKeydown, true);
@@ -41,21 +249,34 @@ async function handleKeydown(event: KeyboardEvent) {
 
         if (SPACE_KEYS.length >= 3) {
             logger.log("Triggering Translation (Space x3)");
+
+            // 处理标准输入框
             if (deepTarget instanceof HTMLInputElement || deepTarget instanceof HTMLTextAreaElement) {
                 const fullText = deepTarget.value;
                 const cursorPosition = deepTarget.selectionStart || fullText.length;
-                // 获取光标前的文本（去掉本次输入的空格干扰）
                 const textBeforeCursor = fullText.slice(0, cursorPosition).trimEnd();
 
-                // 自动判断逻辑（已修正）：
-                // 如果包含空格（说明前面可能是英文句子），视为单词/短语模式，翻译最后一个词
-                // 如果不包含空格（说明是一整段中文），视为整句模式，翻译整个句子
                 if (textBeforeCursor.includes(' ')) {
                     logger.log("Space x3: Detected word mode (contains spaces)");
                     await handleWordTranslation(deepTarget);
                 } else {
                     logger.log("Space x3: Detected sentence mode (no spaces)");
                     await handleSentenceTranslation(deepTarget);
+                }
+            }
+            // 处理 contenteditable 元素 (如 Reddit 评论框)
+            else if (deepTarget.isContentEditable) {
+                logger.log("Space x3: Handling contenteditable element");
+                const textContent = getContentEditableText(deepTarget);
+                const textBeforeCursor = textContent.trimEnd();
+                logger.log("Contenteditable text:", { textContent, textBeforeCursor });
+
+                if (textBeforeCursor.includes(' ')) {
+                    logger.log("Space x3 (contenteditable): Detected word mode");
+                    await handleContentEditableWordTranslation(deepTarget);
+                } else {
+                    logger.log("Space x3 (contenteditable): Detected sentence mode");
+                    await handleContentEditableSentenceTranslation(deepTarget);
                 }
             }
             SPACE_KEYS.length = 0;
@@ -78,25 +299,18 @@ async function handleSentenceTranslation(target: HTMLInputElement | HTMLTextArea
         return;
     }
 
+    // 显示加载动画
+    useTranslationStore.getState().setLoading(true, target);
+
     try {
         const result = await translateText(text);
         logger.log("Translation Result:", result);
 
-        // 🔑 同样应用输入法切换技巧
-        if (target instanceof HTMLInputElement) {
-            logger.log("[InputSwitch] Attempting to switch input method via password type...");
-            const originalType = target.type;
+        // 关闭加载状态
+        useTranslationStore.getState().setLoading(false);
 
-            target.type = 'password';
-            logger.log("[InputSwitch] Type switched to password");
-            target.blur();
-
-            await new Promise(resolve => setTimeout(resolve, 100));
-
-            target.type = originalType || 'text';
-            logger.log("[InputSwitch] Type restored to", target.type);
-            target.focus();
-        }
+        // 聚焦输入框
+        target.focus();
 
         target.value = '';
         target.dispatchEvent(new Event('input', { bubbles: true }));
@@ -106,9 +320,11 @@ async function handleSentenceTranslation(target: HTMLInputElement | HTMLTextArea
 
         logger.log("Showing ghost text (Sentence Mode):", { text: result.translatedText, position: 0 });
         useTranslationStore.getState().show(result.translatedText, target, 0);
-        recordTranslation(text);
+        recordTranslation(text, result.translatedText);
     } catch (err) {
         logger.warn("Translation failed", err);
+        // 显示网络错误提示
+        useTranslationStore.getState().setNetworkError(true, target);
     }
 }
 
@@ -136,29 +352,19 @@ async function handleWordTranslation(target: HTMLInputElement | HTMLTextAreaElem
         return;
     }
 
+    // 显示加载动画
+    useTranslationStore.getState().setLoading(true, target);
+
     try {
         const result = await translateText(textToTranslate);
         logger.log("Word Translation Result:", result);
 
-        // 🔑 强制切换到英文输入法
-        if (target instanceof HTMLInputElement) {
-            logger.log("[InputSwitch] Attempting to switch input method...");
-            const originalType = target.type;
+        // 关闭加载状态
+        useTranslationStore.getState().setLoading(false);
 
-            target.type = 'password';
-            logger.log(`[InputSwitch] Target type is now: ${target.type}`);
-
-            target.blur();
-            logger.log("[InputSwitch] Target blurred");
-
-            await new Promise(resolve => setTimeout(resolve, 100));
-
-            target.type = originalType || 'text';
-            logger.log(`[InputSwitch] Target type restored to: ${target.type}`);
-
-            target.focus();
-            logger.log("[InputSwitch] Target focused");
-        }
+        // 聚焦输入框
+        target.focus();
+        logger.log("[InputSwitch] Target focused");
 
         // 第二步：删除中文和末尾空格
         // segmentStartIndex 是 textToTranslate (例如 "你好") 的开始位置
@@ -179,10 +385,12 @@ async function handleWordTranslation(target: HTMLInputElement | HTMLTextAreaElem
         // 第三步：显示虚影文本
         logger.log("Showing ghost text:", { text: result.translatedText, position: segmentStartIndex });
         useTranslationStore.getState().show(result.translatedText, target, segmentStartIndex);
-        recordTranslation(textToTranslate);
+        recordTranslation(textToTranslate, result.translatedText);
 
         logger.log("Ghost text shown, store state:", useTranslationStore.getState());
     } catch (err) {
         logger.warn("Word Translation failed", err);
+        // 显示网络错误提示
+        useTranslationStore.getState().setNetworkError(true, target);
     }
 }

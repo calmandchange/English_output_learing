@@ -1,5 +1,12 @@
 
 
+export class TranslationError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'TranslationError';
+    }
+}
+
 export async function translateText(text: string): Promise<{ translatedText: string; phonetic?: string }> {
     try {
         console.log('[Translation] Sending message to background:', { type: 'TRANSLATE_REQ_BACKGROUND', text });
@@ -18,7 +25,7 @@ export async function translateText(text: string): Promise<{ translatedText: str
             };
         } else {
             console.warn("[Translation] Background Translation failed:", response?.error);
-            return getMockTranslation(text);
+            throw new TranslationError('翻译失败，请检查网络连接');
         }
     } catch (e) {
         console.error("[Translation] Messaging Error:", e);
@@ -26,14 +33,9 @@ export async function translateText(text: string): Promise<{ translatedText: str
             message: e instanceof Error ? e.message : String(e),
             stack: e instanceof Error ? e.stack : undefined
         });
-        return getMockTranslation(text);
+        if (e instanceof TranslationError) {
+            throw e;
+        }
+        throw new TranslationError('网络连接异常，请稍后重试');
     }
-}
-
-function getMockTranslation(text: string) {
-    console.log("Translating via Mock (Fallback):", text);
-    return {
-        translatedText: `[Mock EN] ${text} (Translated)`,
-        phonetic: `/mɒk fəˈnɛtɪk/`
-    };
 }
