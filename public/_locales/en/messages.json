@@ -1,0 +1,10 @@
+{
+    "extensionName": {
+        "message": "English Output Learning",
+        "description": "Name of the extension"
+    },
+    "extensionDescription": {
+        "message": "Learn English through outputting.",
+        "description": "Description of the extension"
+    }
+}
