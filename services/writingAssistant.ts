@@ -2,16 +2,14 @@ import { getConfig } from './config';
 import { checkWritingQuality, type WritingSuggestion } from './llm';
 
 /**
- * AI写作辅导：检测单个句子
- * 由 store.ts 调用，传入单个句子和完整上下文
+ * AI写作辅导：检测完整输入内容
+ * 由 store.ts 调用，传入完整文本进行检测
  * 
- * @param sentenceToCheck - 需要检测的单个句子
- * @param fullContext - 完整的输入内容（用于上下文理解）
+ * @param fullContent - 完整的输入内容
  * @param targetElement - 目标输入元素
  */
-export async function checkWritingIncremental(
-    sentenceToCheck: string,
-    fullContext: string,
+export async function checkWritingFull(
+    fullContent: string,
     targetElement: HTMLElement
 ): Promise<{
     suggestions: WritingSuggestion[];
@@ -30,13 +28,13 @@ export async function checkWritingIncremental(
         return null;
     }
 
-    // 如果句子为空或没有英文内容，跳过
-    if (!sentenceToCheck || !/[a-zA-Z]/.test(sentenceToCheck)) {
-        console.log('[WritingAssistant] No English content in sentence, skipping');
+    // 如果内容为空或没有英文内容，跳过
+    if (!fullContent || !/[a-zA-Z]/.test(fullContent)) {
+        console.log('[WritingAssistant] No English content, skipping');
         return null;
     }
 
-    console.log('[WritingAssistant] Checking sentence:', sentenceToCheck.substring(0, 80));
+    console.log('[WritingAssistant] Checking full content:', fullContent.substring(0, 100));
 
     // 获取API配置
     const apiKey = config.translationService === 'deepseek'
@@ -56,10 +54,10 @@ export async function checkWritingIncremental(
         : 'GLM';
 
     try {
-        // 检测句子的写作质量
+        // 检测完整内容的写作质量
         const suggestions = await checkWritingQuality(
-            sentenceToCheck,
-            fullContext,
+            fullContent,
+            fullContent,  // 上下文就是完整内容本身
             apiKey,
             baseUrl,
             model,

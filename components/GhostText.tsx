@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslationStore } from '@/services/store';
+import { getConfig } from '@/services/config';
 import { ContextSuggestionModal } from './ContextSuggestionModal';
 
 /**
@@ -131,6 +132,8 @@ const measureTextWidth = (text: string, style: CSSStyleDeclaration): number => {
     return width;
 };
 
+
+
 /**
  * GhostText 组件 - 在输入框内显示固定位置的虚影
  * 
@@ -156,7 +159,8 @@ export const GhostText = () => {
         insertPosition,
         updateMatch,
         hide,
-        acceptGhost
+        acceptGhost,
+        showFeedbackAnimation
     } = useTranslationStore();
 
     const [position, setPosition] = useState<GhostPosition | null>(null);
@@ -171,6 +175,11 @@ export const GhostText = () => {
             return;
         }
 
+        // 追踪 RAF ID 以便清理
+        let rafId: number | null = null;
+        let syncRetryCount = 0;
+        const MAX_SYNC_RETRIES = 20; // 最大重试约 300ms (20 * 16ms)
+
         const updatePosition = () => {
             try {
                 const bounds = getInputBounds(targetElement);
@@ -179,6 +188,31 @@ export const GhostText = () => {
                 // 获取到虚影起始位置的文本
                 const elementValue = getElementValue(targetElement);
                 const textBeforeGhost = elementValue.slice(0, insertPosition);
+
+                // 验证 insertPosition 与实际内容的一致性
+                // 情况1: insertPosition > 0 但内容长度不够（单词模式，DOM 未更新）
+                // 情况2: insertPosition = 0 且内容不为空（句子模式，输入框未清空完成）
+                const shouldWaitForSync =
+                    (insertPosition > 0 && elementValue.length < insertPosition) ||
+                    (insertPosition === 0 && elementValue.length > 0);
+
+                if (shouldWaitForSync && syncRetryCount < MAX_SYNC_RETRIES) {
+                    syncRetryCount++;
+                    console.log('[GhostText] Waiting for DOM sync', {
+                        insertPosition,
+                        elementValueLength: elementValue.length,
+                        retryCount: syncRetryCount
+                    });
+                    // 等待下一帧重新计算
+                    rafId = requestAnimationFrame(updatePosition);
+                    return;
+                }
+
+                // 如果达到最大重试次数仍未同步，强制使用当前值并警告
+                if (syncRetryCount >= MAX_SYNC_RETRIES) {
+                    console.warn('[GhostText] DOM sync timeout, proceeding with current state');
+                }
+
                 const textWidth = measureTextWidth(textBeforeGhost, style);
 
                 // 计算虚字起始位置（考虑滚动偏移）
@@ -247,6 +281,10 @@ export const GhostText = () => {
             if (updatePositionTimeoutRef.current) {
                 clearTimeout(updatePositionTimeoutRef.current);
             }
+            // 取消挂起的 requestAnimationFrame
+            if (rafId !== null) {
+                cancelAnimationFrame(rafId);
+            }
         };
     }, [isVisible, targetElement, insertPosition, consumedLength]);
 
@@ -259,14 +297,31 @@ export const GhostText = () => {
             updateMatch(elementValue);
         };
 
-        const handleKeyDown = (e: KeyboardEvent) => {
+        // ... (existing imports)
+
+        // ...
+
+        const handleKeyDown = async (e: KeyboardEvent) => {
             if (e.key === 'Tab') {
-                e.preventDefault();
-                // 有虚字 → 补全；无虚字 → 触发写作检测
+                // 有虚字 → 检查配置决定是否补全
                 if (ghostText) {
-                    acceptGhost();
+                    const config = await getConfig();
+                    if (config.tabAcceptsGhostText) {
+                        e.preventDefault();
+                        acceptGhost();
+                        // 如果开启了 AI 辅导，也触发检测
+                        if (config.aiWritingAssistant) {
+                            useTranslationStore.getState().triggerWritingCheck();
+                        }
+                    }
+                    // 如果 tabAcceptsGhostText 为 false，不阻止默认行为（移动焦点）
                 } else {
-                    // 触发写作检测（从 store 调用）
+                    // 无虚字 → 触发写作检测（inputListener 也会处理，这里是针对 GhostText 聚焦时的双重保障，
+                    // 但通常无虚字时 GhostText 组件可能不可见。如果可见但无 ghostText (e.g. error state?), Check Config）
+                    // 实际上 GhostText 如果没有 text 通常 render null。
+                    // 但 useEffect 绑定在 targetElement 上，所以即使 GhostText 组件 return null，effect 里的 listener 依然可能存在？
+                    // 不，Effect 依赖 isVisible。
+                    e.preventDefault();
                     useTranslationStore.getState().triggerWritingCheck();
                 }
             } else if (e.key === 'Escape') {
@@ -275,7 +330,7 @@ export const GhostText = () => {
         };
 
         targetElement.addEventListener('input', handleInput);
-        targetElement.addEventListener('keydown', handleKeyDown as EventListener);
+        targetElement.addEventListener('keydown', handleKeyDown as unknown as EventListener);
 
         // 失焦时延迟隐藏（优化：使用更短的延迟 + 焦点二次确认）
         let blurTimeout: NodeJS.Timeout | null = null;
@@ -309,7 +364,7 @@ export const GhostText = () => {
 
         return () => {
             targetElement.removeEventListener('input', handleInput);
-            targetElement.removeEventListener('keydown', handleKeyDown as EventListener);
+            targetElement.removeEventListener('keydown', handleKeyDown as unknown as EventListener);
             targetElement.removeEventListener('blur', handleBlur);
             targetElement.removeEventListener('focus', handleFocus);
             if (blurTimeout) clearTimeout(blurTimeout);
@@ -347,6 +402,51 @@ export const GhostText = () => {
                             opacity: 1;
                             transform: scale(1);
                         }
+                    }
+                `}</style>
+            </span>
+        );
+    };
+
+    // 渲染反馈动画（对号 + 提示语）
+    const renderFeedbackAnimation = () => {
+        return (
+            <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '6px 12px',
+                backgroundColor: 'rgba(34, 197, 94, 0.95)', // green-500
+                backdropFilter: 'blur(8px)',
+                borderRadius: '20px',
+                boxShadow: '0 4px 12px rgba(34, 197, 94, 0.3)',
+                color: 'white',
+                fontSize: '13px',
+                fontWeight: 600,
+                animation: 'slideUpFade 0.5s cubic-bezier(0.16, 1, 0.3, 1)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                transformOrigin: 'center left'
+            }}>
+                {/* Checkmark Icon */}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" style={{ animation: 'drawCheck 0.4s 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) backwards' }}></polyline>
+                </svg>
+                <span style={{ animation: 'fadeIn 0.4s 0.3s ease-out backwards' }}>
+                    Excellent!
+                </span>
+
+                <style>{`
+                    @keyframes slideUpFade {
+                        0% { opacity: 0; transform: translateY(4px) scale(0.96); }
+                        100% { opacity: 1; transform: translateY(0) scale(1); }
+                    }
+                    @keyframes drawCheck {
+                        0% { opacity: 0; transform: scale(0.5); }
+                        100% { opacity: 1; transform: scale(1); }
+                    }
+                    @keyframes fadeIn {
+                        0% { opacity: 0; transform: translateX(-4px); }
+                        100% { opacity: 1; transform: translateX(0); }
                     }
                 `}</style>
             </span>
@@ -401,6 +501,15 @@ export const GhostText = () => {
         return (
             <span ref={ghostRef} style={baseStyle}>
                 {renderNetworkError()}
+            </span>
+        );
+    }
+
+    // 显示反馈动画
+    if (showFeedbackAnimation) {
+        return (
+            <span ref={ghostRef} style={baseStyle}>
+                {renderFeedbackAnimation()}
             </span>
         );
     }

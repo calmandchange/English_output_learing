@@ -29,9 +29,7 @@ interface GhostTextState {
     suggestion: GhostSuggestion | null;
     suggestions: WritingSuggestion[];  // 新增：多个写作建议
     needsSuggestion: boolean;
-    isCheckingWriting: boolean;  // 新增：写作检测中
-    // 句子级别缓存
-    checkedSentences: Set<string>;  // 已检测过的句子集合
+    isCheckingWriting: boolean;  // 写作检测中
 
     show: (text: string, target: HTMLInputElement | HTMLTextAreaElement | HTMLElement, position: number, connector?: string) => void;
     hide: () => void;
@@ -49,6 +47,7 @@ interface GhostTextState {
     setNeedsSuggestion: (needs: boolean) => void;
     triggerWritingCheck: () => Promise<void>;  // 新增
     setCheckingWriting: (checking: boolean) => void;  // 新增
+    showFeedbackAnimation: boolean; // 新增：是否显示反馈动画
 }
 
 export const useTranslationStore = create<GhostTextState>((set, get) => ({
@@ -68,7 +67,7 @@ export const useTranslationStore = create<GhostTextState>((set, get) => ({
     suggestions: [],
     needsSuggestion: false,
     isCheckingWriting: false,
-    checkedSentences: new Set<string>(),
+    showFeedbackAnimation: false,
 
     show: (text, targetElement, insertPosition) => {
         // 保存原始属性
@@ -425,10 +424,10 @@ export const useTranslationStore = create<GhostTextState>((set, get) => ({
     },
 
     triggerWritingCheck: async () => {
-        const { targetElement, checkedSentences, isCheckingWriting } = get();
+        const { targetElement, isCheckingWriting } = get();
         if (!targetElement || isCheckingWriting) return;
 
-        // 获取当前内容
+        // 获取当前完整内容
         const currentContent = (targetElement instanceof HTMLInputElement || targetElement instanceof HTMLTextAreaElement)
             ? targetElement.value
             : (targetElement.innerText || targetElement.textContent || '');
@@ -439,54 +438,38 @@ export const useTranslationStore = create<GhostTextState>((set, get) => ({
             return;
         }
 
-        // 分句：按 .!?; 分割
-        const sentences = currentContent
-            .split(/(?<=[.!?;。！？；])\s*/)
-            .map(s => s.trim())
-            .filter(s => s.length > 0 && /[a-zA-Z]/.test(s));
-
-        // 找出未检测过的句子
-        const uncheckedSentences = sentences.filter(s => !checkedSentences.has(s));
-
-        if (uncheckedSentences.length === 0) {
-            console.log('[Store] All sentences already checked, skipping');
-            return;
-        }
-
-        console.log('[Store] Unchecked sentences:', uncheckedSentences);
+        console.log('[Store] Checking full content:', currentContent.substring(0, 100));
 
         set({ isCheckingWriting: true });
 
         try {
             // 动态导入避免循环依赖
-            const { checkWritingIncremental } = await import('./writingAssistant');
+            const { checkWritingFull } = await import('./writingAssistant');
 
-            // 检测每个未检测的句子
-            const allSuggestions: import('./llm').WritingSuggestion[] = [];
+            // 直接检测完整内容
+            const result = await checkWritingFull(currentContent, targetElement);
 
-            for (const sentence of uncheckedSentences) {
-                const result = await checkWritingIncremental(
-                    sentence,
-                    currentContent,  // 完整上下文
-                    targetElement
-                );
-
-                if (result && result.suggestions && result.suggestions.length > 0) {
-                    allSuggestions.push(...result.suggestions);
-                }
-
-                // 将句子加入已检测缓存
-                checkedSentences.add(sentence);
-            }
-
-            // 更新状态
-            if (allSuggestions.length > 0) {
-                set({
-                    suggestions: allSuggestions,
-                    checkedSentences: new Set(checkedSentences)  // 触发更新
-                });
+            if (result && result.suggestions && result.suggestions.length > 0) {
+                set({ suggestions: result.suggestions });
             } else {
-                set({ checkedSentences: new Set(checkedSentences) });
+                // 没有建议，显示反馈动画
+                set({
+                    showFeedbackAnimation: true,
+                    isVisible: true, // 确保 GhostText 组件可见以进行渲染和位置计算
+                    isLoading: false
+                });
+
+                // 2秒后自动隐藏
+                setTimeout(() => {
+                    const { showFeedbackAnimation } = get();
+                    // 只有当前仍显示反馈动画时才关闭（避免打断后续操作）
+                    if (showFeedbackAnimation) {
+                        set({
+                            showFeedbackAnimation: false,
+                            isVisible: false
+                        });
+                    }
+                }, 2000);
             }
         } catch (error) {
             console.error('[Store] Writing check failed:', error);

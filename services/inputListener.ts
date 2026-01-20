@@ -1,4 +1,5 @@
 import { useTranslationStore } from './store.ts';
+import { getConfig } from './config.ts';
 import { translateText } from './translation.ts';
 import { recordTranslation } from './stats.ts';
 
@@ -301,14 +302,33 @@ async function handleKeydown(event: KeyboardEvent) {
 
         // 只在无虚字时拦截 Tab（有虚字时由 GhostText 组件处理）
         if (!isVisible || !ghostText) {
-            event.preventDefault();
-            logger.log("Tab pressed without ghost text, triggering writing check");
+            const config = await getConfig();
+            // 只有当开启了 AI 助手时才拦截 Tab
+            if (config.aiWritingAssistant) {
+                event.preventDefault();
+                logger.log("Tab pressed without ghost text, triggering writing check");
 
-            // 设置 targetElement 以便写作检测知道目标输入框
-            useTranslationStore.setState({ targetElement: deepTarget as any });
+                // 获取光标位置
+                let cursorPosition = 0;
+                if (deepTarget instanceof HTMLInputElement || deepTarget instanceof HTMLTextAreaElement) {
+                    cursorPosition = deepTarget.selectionStart || deepTarget.value.length;
+                } else {
+                    const selection = window.getSelection();
+                    if (selection && selection.rangeCount > 0) {
+                        // 简化的 contentEditable 光标位置获取
+                        cursorPosition = deepTarget.innerText.length;
+                    }
+                }
 
-            // 触发写作检测
-            useTranslationStore.getState().triggerWritingCheck();
+                // 设置 targetElement 和插入位置
+                useTranslationStore.setState({
+                    targetElement: deepTarget as any,
+                    insertPosition: cursorPosition
+                });
+
+                // 触发写作检测
+                useTranslationStore.getState().triggerWritingCheck();
+            }
         }
         return;
     }

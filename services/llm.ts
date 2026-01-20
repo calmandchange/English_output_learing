@@ -1,3 +1,17 @@
+/**
+ * 从 Markdown 代码块中提取 JSON 内容
+ * LLM 有时会将 JSON 包裹在 ```json ... ``` 中，需要清理
+ */
+function extractJsonFromMarkdown(text: string): string {
+    // 尝试匹配 ```json ... ``` 或 ``` ... ``` 格式
+    const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (codeBlockMatch) {
+        return codeBlockMatch[1].trim();
+    }
+    // 如果没有代码块，返回原始文本
+    return text.trim();
+}
+
 interface LLMMessage {
     role: 'system' | 'user';
     content: string;
@@ -25,7 +39,7 @@ export async function translateWithLLM(
     const messages: LLMMessage[] = [
         {
             role: 'system',
-            content: `You are a native English speaker and professional translator. Translate the following Chinese text into NATURAL, IDIOMATIC English.
+            content: `You are a native English speaker and professional translator. Translate the following text into NATURAL, IDIOMATIC English.
 
 **TRANSLATION PRINCIPLES:**
 1. **Sound Native**: Use expressions a native speaker would actually say, NOT word-for-word translations
@@ -38,11 +52,12 @@ export async function translateWithLLM(
 5. **Natural Word Order**: Adverbs, adjectives in native-sounding positions
 6. **Appropriate Register**: Match formality to context (casual/professional)
 
+The user will provide text wrapped in double quotes (e.g., "text"). Please translate the content INSIDE the quotes.
 Only return the translated text without any explanation.`
         },
         {
             role: 'user',
-            content: text
+            content: `"${text}"`
         }
     ];
 
@@ -156,9 +171,10 @@ Only suggest improvements that significantly enhance clarity or naturalness. Min
             throw new Error(`${providerName} returned empty response`);
         }
 
-        // 解析 JSON 响应
+        // 解析 JSON 响应（处理 Markdown 代码块包装）
         try {
-            const parsed = JSON.parse(resultText);
+            const jsonText = extractJsonFromMarkdown(resultText);
+            const parsed = JSON.parse(jsonText);
             return parsed;
         } catch (e) {
             console.error('[LLM] Failed to parse grammar check result:', resultText);
@@ -484,9 +500,10 @@ FULL CONTEXT: "${fullContext}"`
             return [];
         }
 
-        // 解析 JSON 数组
+        // 解析 JSON 数组（处理 Markdown 代码块包装）
         try {
-            const suggestions = JSON.parse(resultText);
+            const jsonText = extractJsonFromMarkdown(resultText);
+            const suggestions = JSON.parse(jsonText);
             if (Array.isArray(suggestions)) {
                 const validSuggestions = suggestions.filter(s =>
                     s.type && s.level && s.category && s.position && s.original && s.suggested && s.reason
