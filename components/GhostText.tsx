@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslationStore } from '@/services/store';
+import { ContextSuggestionModal } from './ContextSuggestionModal';
 
 /**
  * 输入框边界信息
@@ -261,7 +262,13 @@ export const GhostText = () => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Tab') {
                 e.preventDefault();
-                acceptGhost();
+                // 有虚字 → 补全；无虚字 → 触发写作检测
+                if (ghostText) {
+                    acceptGhost();
+                } else {
+                    // 触发写作检测（从 store 调用）
+                    useTranslationStore.getState().triggerWritingCheck();
+                }
             } else if (e.key === 'Escape') {
                 hide();
             }
@@ -363,9 +370,10 @@ export const GhostText = () => {
         );
     };
 
-    // 判断是否应该显示
+    // 判断是否应该显示 GhostText
+    // 注意：ContextSuggestionModal 需要始终渲染（不依赖 GhostText 可见性）
     if (!isVisible || !position) {
-        return null;
+        return <ContextSuggestionModal />;
     }
 
     // 基础样式
@@ -422,34 +430,40 @@ export const GhostText = () => {
     };
 
     return (
-        <span
-            ref={ghostRef}
-            style={ghostContainerStyle}
-        >
-            {/* 1. 已匹配部分：使用用户输入的文本占位，但完全透明 */}
-            <span style={{ visibility: 'hidden' }}>
-                {inputSegment.slice(0, matchedCount)}
-            </span>
-
-            {/* 2. 错误部分：使用用户输入的文本占位，文字透明但显示红色波浪线 */}
-            {hasError && (
-                <span style={{
-                    color: 'transparent',
-                    textDecoration: 'underline wavy #ef4444',
-                    textDecorationThickness: '1.5px',
-                    textUnderlineOffset: '2px'
-                }}>
-                    {inputSegment.slice(matchedCount)}
+        <>
+            {/* 虚影文本 */}
+            <span
+                ref={ghostRef}
+                style={ghostContainerStyle}
+            >
+                {/* 1. 已匹配部分：使用用户输入的文本占位，但完全透明 */}
+                <span style={{ visibility: 'hidden' }}>
+                    {inputSegment.slice(0, matchedCount)}
                 </span>
-            )}
 
-            {/* 3. 剩余虚影部分：显示灰色文本 */}
-            <span style={{
-                color: 'rgba(100, 100, 100, 0.5)',
-                fontStyle: 'italic'
-            }}>
-                {remainingGhost}
+                {/* 2. 错误部分：使用用户输入的文本占位，文字透明但显示红色波浪线 */}
+                {hasError && (
+                    <span style={{
+                        color: 'transparent',
+                        textDecoration: 'underline wavy #ef4444',
+                        textDecorationThickness: '1.5px',
+                        textUnderlineOffset: '2px'
+                    }}>
+                        {inputSegment.slice(matchedCount)}
+                    </span>
+                )}
+
+                {/* 3. 剩余虚影部分：显示灰色文本 */}
+                <span style={{
+                    color: 'rgba(100, 100, 100, 0.5)',
+                    fontStyle: 'italic'
+                }}>
+                    {remainingGhost}
+                </span>
             </span>
-        </span>
+
+            {/* 语法建议弹窗 */}
+            <ContextSuggestionModal />
+        </>
     );
 };

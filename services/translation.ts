@@ -9,7 +9,10 @@ export class TranslationError extends Error {
 
 export async function translateText(text: string): Promise<{ translatedText: string; phonetic?: string }> {
     try {
-        console.log('[Translation] Sending message to background:', { type: 'TRANSLATE_REQ_BACKGROUND', text });
+        console.log('[Translation] Sending message to background:', {
+            type: 'TRANSLATE_REQ_BACKGROUND',
+            text
+        });
 
         const response = await chrome.runtime.sendMessage({
             type: 'TRANSLATE_REQ_BACKGROUND',
@@ -25,7 +28,7 @@ export async function translateText(text: string): Promise<{ translatedText: str
             };
         } else {
             console.warn("[Translation] Background Translation failed:", response?.error);
-            throw new TranslationError('翻译失败，请检查网络连接');
+            throw new TranslationError('翻译失败,请检查网络连接');
         }
     } catch (e) {
         console.error("[Translation] Messaging Error:", e);

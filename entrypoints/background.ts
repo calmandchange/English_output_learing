@@ -6,10 +6,10 @@ import { getConfig } from '@/services/config';
 export default defineBackground({
   persistent: false,
   main() {
-    console.log('[Background] Script initialized - Google Translation Only');
+    console.log('[Background] Script initialized');
 
     /**
-     * 使用 Google 翻译 API 翻译文本
+     * 使用配置的翻译服务翻译文本
      */
     async function translate(text: string, targetLang: string = 'en'): Promise<string> {
       try {
@@ -21,7 +21,6 @@ export default defineBackground({
         } else if (config.translationService === 'glm') {
           return await glmTranslate(text, config.glmApiKey);
         } else {
-          // Default to Google
           return await googleTranslate(text, targetLang);
         }
       } catch (error) {

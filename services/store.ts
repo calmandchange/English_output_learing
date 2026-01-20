@@ -1,4 +1,13 @@
 import { create } from 'zustand';
+import type { WritingSuggestion } from './llm';
+
+// 保留旧接口用于兼容
+interface GhostSuggestion {
+    issue: string;
+    original: string;
+    suggested: string;
+    reason?: string;
+}
 
 interface GhostTextState {
     isVisible: boolean;
@@ -16,13 +25,30 @@ interface GhostTextState {
     originalPlaceholder: string;
     originalInputMode: string;
     originalLang: string;
+    // 语法检查相关
+    suggestion: GhostSuggestion | null;
+    suggestions: WritingSuggestion[];  // 新增：多个写作建议
+    needsSuggestion: boolean;
+    isCheckingWriting: boolean;  // 新增：写作检测中
+    // 句子级别缓存
+    checkedSentences: Set<string>;  // 已检测过的句子集合
 
-    show: (text: string, target: HTMLInputElement | HTMLTextAreaElement | HTMLElement, position: number) => void;
+    show: (text: string, target: HTMLInputElement | HTMLTextAreaElement | HTMLElement, position: number, connector?: string) => void;
     hide: () => void;
     updateMatch: (userInput: string) => void;
     acceptGhost: () => void;  // Tab 补全
     setLoading: (loading: boolean, target?: HTMLInputElement | HTMLTextAreaElement | HTMLElement) => void;
     setNetworkError: (error: boolean, target?: HTMLInputElement | HTMLTextAreaElement | HTMLElement) => void;
+    setSuggestion: (suggestion: GhostSuggestion | null) => void;
+    setSuggestions: (suggestions: WritingSuggestion[]) => void;  // 新增
+    acceptSuggestion: () => void;
+    acceptSuggestionByIndex: (index: number) => void;  // 新增
+    rejectSuggestion: () => void;
+    rejectSuggestionByIndex: (index: number) => void;  // 新增
+    acceptAllSuggestions: () => void;  // Tab 一键应用所有建议
+    setNeedsSuggestion: (needs: boolean) => void;
+    triggerWritingCheck: () => Promise<void>;  // 新增
+    setCheckingWriting: (checking: boolean) => void;  // 新增
 }
 
 export const useTranslationStore = create<GhostTextState>((set, get) => ({
@@ -38,6 +64,11 @@ export const useTranslationStore = create<GhostTextState>((set, get) => ({
     originalPlaceholder: '',
     originalInputMode: '',
     originalLang: '',
+    suggestion: null,
+    suggestions: [],
+    needsSuggestion: false,
+    isCheckingWriting: false,
+    checkedSentences: new Set<string>(),
 
     show: (text, targetElement, insertPosition) => {
         // 保存原始属性
@@ -118,7 +149,7 @@ export const useTranslationStore = create<GhostTextState>((set, get) => ({
         });
     },
 
-    acceptGhost: () => {
+    acceptGhost: async () => {
         const { ghostText, targetElement, insertPosition, matchedCount, isVisible } = get();
         if (!isVisible || !targetElement || !ghostText) return;
 
@@ -165,7 +196,7 @@ export const useTranslationStore = create<GhostTextState>((set, get) => ({
             targetElement.dispatchEvent(new InputEvent('input', { bubbles: true }));
         }
 
-        // 隐藏虚影（但不恢复属性，继续英文输入模式）
+        // 隐藏虚影（不触发写作检测，只有无虚字按 Tab 才触发）
         set({
             isVisible: false,
             ghostText: '',
@@ -181,27 +212,35 @@ export const useTranslationStore = create<GhostTextState>((set, get) => ({
         const { ghostText, insertPosition, isVisible } = get();
         if (!isVisible) return;
 
-        // User input text starting from the ghost text position
+        // 用户在虚影位置开始的输入片段
         const inputSegment = userInput.slice(insertPosition);
-        const consumedLength = inputSegment.length;
 
         let matchedCount = 0;
 
-        // Calculate matched count (longest prefix match)
+        // 计算最长前缀匹配(支持符号、空格和字母)
         for (let i = 0; i < inputSegment.length && i < ghostText.length; i++) {
-            if (inputSegment[i].toLowerCase() === ghostText[i].toLowerCase()) {
+            const inputChar = inputSegment[i];
+            const ghostChar = ghostText[i];
+
+            // 对于字母:不区分大小写匹配
+            // 对于符号和空格:精确匹配
+            const isMatch = /[a-zA-Z]/.test(inputChar)
+                ? inputChar.toLowerCase() === ghostChar.toLowerCase()
+                : inputChar === ghostChar;
+
+            if (isMatch) {
                 matchedCount = i + 1;
             } else {
                 break;
             }
         }
 
-        const hasError = consumedLength > matchedCount;
+        // ✅ 修复：consumedLength 应该等于 matchedCount（已匹配的字符数）
+        // 因为已匹配的字符会被「隐藏」，剩余的虚影从 matchedCount 开始显示
+        const consumedLength = matchedCount;
+        const hasError = inputSegment.length > matchedCount;
 
-        // If fully matched (and no extra error chars? or just fully matched the ghost text?)
-        // If the user typed the whole ghost text correctly (or more), we hide.
-        // Actually if they typed "hellox", matchedCount=5 (len of hello). 
-        // We probably want to hide the ghost overlay if the *Ghost Text* is fully exhausted by matches.
+        // 如果虚影文本已全部匹配，隐藏虚影
         if (matchedCount >= ghostText.length) {
             set({
                 isVisible: false,
@@ -265,6 +304,195 @@ export const useTranslationStore = create<GhostTextState>((set, get) => ({
         } else {
             set({ networkError: error });
         }
-    }
+    },
+
+    setSuggestion: (suggestion: GhostSuggestion | null) => {
+        set({ suggestion });
+    },
+
+    acceptSuggestion: () => {
+        const { suggestion, targetElement } = get();
+        if (!suggestion || !targetElement) return;
+
+        // 获取当前内容
+        const currentContent = (targetElement instanceof HTMLInputElement || targetElement instanceof HTMLTextAreaElement)
+            ? targetElement.value
+            : (targetElement.innerText || targetElement.textContent || '');
+
+        // 替换原文为建议文本
+        const newContent = currentContent.replace(
+            suggestion.original,
+            suggestion.suggested
+        );
+
+        // 更新内容
+        if (targetElement instanceof HTMLInputElement || targetElement instanceof HTMLTextAreaElement) {
+            targetElement.value = newContent;
+            targetElement.dispatchEvent(new Event('input', { bubbles: true }));
+        } else {
+            targetElement.innerText = newContent;
+        }
+
+        // 更新缓存（建议已被接受，内容已改变）
+        set({
+            suggestion: null
+        });
+    },
+
+    rejectSuggestion: () => {
+        // 拒绝建议
+        set({ suggestion: null });
+    },
+
+    setNeedsSuggestion: (needs: boolean) => {
+        set({ needsSuggestion: needs });
+    },
+
+    setSuggestions: (suggestions) => {
+        set({ suggestions });
+    },
+
+    setCheckingWriting: (checking: boolean) => {
+        set({ isCheckingWriting: checking });
+    },
+
+    acceptSuggestionByIndex: (index: number) => {
+        const { suggestions, targetElement } = get();
+        const suggestion = suggestions[index];
+        if (!suggestion || !targetElement) return;
+
+        // 获取当前内容
+        const currentContent = (targetElement instanceof HTMLInputElement || targetElement instanceof HTMLTextAreaElement)
+            ? targetElement.value
+            : (targetElement.innerText || targetElement.textContent || '');
+
+        // 替换原文为建议文本
+        const newContent = currentContent.replace(suggestion.original, suggestion.suggested);
+
+        // 更新内容
+        if (targetElement instanceof HTMLInputElement || targetElement instanceof HTMLTextAreaElement) {
+            targetElement.value = newContent;
+            targetElement.dispatchEvent(new Event('input', { bubbles: true }));
+        } else {
+            targetElement.innerText = newContent;
+        }
+
+        // 移除已处理的建议
+        const newSuggestions = suggestions.filter((_, i) => i !== index);
+        set({
+            suggestions: newSuggestions
+        });
+    },
+
+    rejectSuggestionByIndex: (index: number) => {
+        const { suggestions } = get();
+        const newSuggestions = suggestions.filter((_, i) => i !== index);
+        set({ suggestions: newSuggestions });
+    },
+
+    acceptAllSuggestions: () => {
+        const { suggestions, targetElement } = get();
+        if (!suggestions.length || !targetElement) return;
+
+        // 获取当前内容
+        let currentContent = (targetElement instanceof HTMLInputElement || targetElement instanceof HTMLTextAreaElement)
+            ? targetElement.value
+            : (targetElement.innerText || targetElement.textContent || '');
+
+        // 从后往前按顺序应用所有建议，避免索引错位
+        // 先按 original 在 currentContent 中的位置排序（从后往前）
+        const sortedSuggestions = [...suggestions].sort((a, b) => {
+            const posA = currentContent.lastIndexOf(a.original);
+            const posB = currentContent.lastIndexOf(b.original);
+            return posB - posA;  // 从后往前排列
+        });
+
+        // 依次替换
+        for (const suggestion of sortedSuggestions) {
+            currentContent = currentContent.replace(suggestion.original, suggestion.suggested);
+        }
+
+        // 更新内容
+        if (targetElement instanceof HTMLInputElement || targetElement instanceof HTMLTextAreaElement) {
+            targetElement.value = currentContent;
+            targetElement.dispatchEvent(new Event('input', { bubbles: true }));
+        } else {
+            targetElement.innerText = currentContent;
+        }
+
+        // 清空建议列表
+        set({ suggestions: [] });
+    },
+
+    triggerWritingCheck: async () => {
+        const { targetElement, checkedSentences, isCheckingWriting } = get();
+        if (!targetElement || isCheckingWriting) return;
+
+        // 获取当前内容
+        const currentContent = (targetElement instanceof HTMLInputElement || targetElement instanceof HTMLTextAreaElement)
+            ? targetElement.value
+            : (targetElement.innerText || targetElement.textContent || '');
+
+        // 只检测英文内容
+        if (!/[a-zA-Z]/.test(currentContent)) {
+            console.log('[Store] No English content, skipping');
+            return;
+        }
+
+        // 分句：按 .!?; 分割
+        const sentences = currentContent
+            .split(/(?<=[.!?;。！？；])\s*/)
+            .map(s => s.trim())
+            .filter(s => s.length > 0 && /[a-zA-Z]/.test(s));
+
+        // 找出未检测过的句子
+        const uncheckedSentences = sentences.filter(s => !checkedSentences.has(s));
+
+        if (uncheckedSentences.length === 0) {
+            console.log('[Store] All sentences already checked, skipping');
+            return;
+        }
+
+        console.log('[Store] Unchecked sentences:', uncheckedSentences);
+
+        set({ isCheckingWriting: true });
+
+        try {
+            // 动态导入避免循环依赖
+            const { checkWritingIncremental } = await import('./writingAssistant');
+
+            // 检测每个未检测的句子
+            const allSuggestions: import('./llm').WritingSuggestion[] = [];
+
+            for (const sentence of uncheckedSentences) {
+                const result = await checkWritingIncremental(
+                    sentence,
+                    currentContent,  // 完整上下文
+                    targetElement
+                );
+
+                if (result && result.suggestions && result.suggestions.length > 0) {
+                    allSuggestions.push(...result.suggestions);
+                }
+
+                // 将句子加入已检测缓存
+                checkedSentences.add(sentence);
+            }
+
+            // 更新状态
+            if (allSuggestions.length > 0) {
+                set({
+                    suggestions: allSuggestions,
+                    checkedSentences: new Set(checkedSentences)  // 触发更新
+                });
+            } else {
+                set({ checkedSentences: new Set(checkedSentences) });
+            }
+        } catch (error) {
+            console.error('[Store] Writing check failed:', error);
+        } finally {
+            set({ isCheckingWriting: false });
+        }
+    },
 }));
 

@@ -11,6 +11,38 @@ const logger = {
 };
 
 /**
+ * 智能处理连接符：根据 LLM 返回值和前文末尾字符决定连接符
+ * @param llmConnector - LLM 返回的连接符
+ * @param previousText - 前文内容
+ * @returns 最终使用的连接符
+ */
+function getSmartConnector(llmConnector: string | undefined, previousText: string): string {
+    // 如果 LLM 返回了有效的连接符，直接使用
+    if (llmConnector && llmConnector.trim()) {
+        return llmConnector;
+    }
+
+    // 如果没有前文，不需要连接符
+    if (!previousText) {
+        return '';
+    }
+
+    // 根据前文末尾字符智能决定连接符
+    const lastChar = previousText[previousText.length - 1];
+
+    if (/[,.!?;:]/.test(lastChar)) {
+        // 末尾是标点，只加空格
+        return ' ';
+    } else if (/\s/.test(lastChar)) {
+        // 末尾是空格，不需要额外连接符
+        return '';
+    } else {
+        // 末尾是普通字符，加逗号+空格
+        return ', ';
+    }
+}
+
+/**
  * 获取 contenteditable 元素的文本内容
  */
 function getContentEditableText(element: HTMLElement): string {
@@ -133,10 +165,10 @@ async function setContentEditableText(element: HTMLElement, text: string): Promi
  * 处理 contenteditable 元素的整句翻译
  */
 async function handleContentEditableSentenceTranslation(target: HTMLElement) {
-    const text = getContentEditableText(target).trimEnd();
-    logger.log("Processing Contenteditable Sentence Translation", { text });
+    const fullText = getContentEditableText(target).trimEnd();
+    logger.log("Processing Contenteditable Sentence Translation", { fullText });
 
-    if (!text.trim()) {
+    if (!fullText.trim()) {
         logger.log("Empty text, skipping.");
         return;
     }
@@ -145,7 +177,7 @@ async function handleContentEditableSentenceTranslation(target: HTMLElement) {
     useTranslationStore.getState().setLoading(true, target);
 
     try {
-        const result = await translateText(text);
+        const result = await translateText(fullText);
         logger.log("Translation Result:", result);
 
         // 关闭加载状态
@@ -155,10 +187,18 @@ async function handleContentEditableSentenceTranslation(target: HTMLElement) {
         await setContentEditableText(target, '');
         target.focus();
 
-        // 显示 ghost text
-        logger.log("Showing ghost text (Contenteditable Sentence Mode):", { text: result.translatedText });
-        useTranslationStore.getState().show(result.translatedText, target, 0);
-        recordTranslation(text, result.translatedText);
+        // 显示虚影（不带连接符）
+        logger.log("Showing ghost text (Contenteditable Sentence Mode):", {
+            text: result.translatedText
+        });
+
+        useTranslationStore.getState().show(
+            result.translatedText,
+            target,
+            0
+        );
+
+        recordTranslation(fullText, result.translatedText);
     } catch (err) {
         logger.warn("Contenteditable Translation failed", err);
         useTranslationStore.getState().setNetworkError(true, target);
@@ -171,7 +211,8 @@ async function handleContentEditableSentenceTranslation(target: HTMLElement) {
 async function handleContentEditableWordTranslation(target: HTMLElement) {
     const fullText = getContentEditableText(target);
     const cleanText = fullText.trimEnd();
-    const segments = cleanText.split(' ');
+    // 修改：使用正则分割，支持符号和空格作为边界
+    const segments = cleanText.split(/[\s,.!?;:，。！？：；]+/);
     const textToTranslate = segments[segments.length - 1];
 
     logger.log("Processing Contenteditable Word Translation", { fullText, textToTranslate });
@@ -181,6 +222,10 @@ async function handleContentEditableWordTranslation(target: HTMLElement) {
         logger.log("Skipping: No Chinese detected or empty text.");
         return;
     }
+
+    // 提取前文 (保留原文的标点符号)
+    const newText = cleanText.substring(0, cleanText.length - textToTranslate.length);
+    logger.log("Extracted previous text:", newText);
 
     // 显示加载动画
     useTranslationStore.getState().setLoading(true, target);
@@ -193,8 +238,11 @@ async function handleContentEditableWordTranslation(target: HTMLElement) {
         useTranslationStore.getState().setLoading(false);
 
         // 删除最后一个中文词，保留前面的内容
-        const beforeLastWord = segments.slice(0, -1).join(' ');
-        const newText = beforeLastWord ? beforeLastWord + ' ' : '';
+        // 删除最后一个中文词，保留前面的内容
+        // 获取智能连接符
+        const connector = getSmartConnector(undefined, newText);
+
+        // 删除最后一个中文词，保留前面的内容
         await setContentEditableText(target, newText);
         target.focus();
 
@@ -209,14 +257,23 @@ async function handleContentEditableWordTranslation(target: HTMLElement) {
         }
 
         // 显示 ghost text
-        logger.log("Showing ghost text (Contenteditable Word Mode):", { text: result.translatedText });
-        useTranslationStore.getState().show(result.translatedText, target, newText.length);
+        logger.log("Showing ghost text (Contenteditable Word Mode):", {
+            text: result.translatedText
+        });
+
+        useTranslationStore.getState().show(
+            result.translatedText,
+            target,
+            newText.length
+        );
+
         recordTranslation(textToTranslate, result.translatedText);
     } catch (err) {
         logger.warn("Contenteditable Word Translation failed", err);
         useTranslationStore.getState().setNetworkError(true, target);
     }
 }
+
 
 export function setupInputListeners() {
     logger.log("Setting up input listeners...");
@@ -238,6 +295,24 @@ async function handleKeydown(event: KeyboardEvent) {
 
     if (!isInput) return;
 
+    // Tab 键处理：无虚字时触发写作检测
+    if (event.key === 'Tab') {
+        const { isVisible, ghostText } = useTranslationStore.getState();
+
+        // 只在无虚字时拦截 Tab（有虚字时由 GhostText 组件处理）
+        if (!isVisible || !ghostText) {
+            event.preventDefault();
+            logger.log("Tab pressed without ghost text, triggering writing check");
+
+            // 设置 targetElement 以便写作检测知道目标输入框
+            useTranslationStore.setState({ targetElement: deepTarget as any });
+
+            // 触发写作检测
+            useTranslationStore.getState().triggerWritingCheck();
+        }
+        return;
+    }
+
     // Space x3 Logic
     if ((event.key === ' ' || event.code === 'Space') && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
         const now = Date.now();
@@ -256,11 +331,12 @@ async function handleKeydown(event: KeyboardEvent) {
                 const cursorPosition = deepTarget.selectionStart || fullText.length;
                 const textBeforeCursor = fullText.slice(0, cursorPosition).trimEnd();
 
-                if (textBeforeCursor.includes(' ')) {
+                // 使用空格判断句子/单词模式
+                if (/\s/.test(textBeforeCursor)) {
                     logger.log("Space x3: Detected word mode (contains spaces)");
                     await handleWordTranslation(deepTarget);
                 } else {
-                    logger.log("Space x3: Detected sentence mode (no spaces)");
+                    logger.log("Space x3: Detected sentence mode (no spaces or punctuation)");
                     await handleSentenceTranslation(deepTarget);
                 }
             }
@@ -271,7 +347,8 @@ async function handleKeydown(event: KeyboardEvent) {
                 const textBeforeCursor = textContent.trimEnd();
                 logger.log("Contenteditable text:", { textContent, textBeforeCursor });
 
-                if (textBeforeCursor.includes(' ')) {
+                // 使用空格判断句子/单词模式
+                if (/\s/.test(textBeforeCursor)) {
                     logger.log("Space x3 (contenteditable): Detected word mode");
                     await handleContentEditableWordTranslation(deepTarget);
                 } else {
@@ -292,9 +369,10 @@ async function handleKeydown(event: KeyboardEvent) {
 }
 
 async function handleSentenceTranslation(target: HTMLInputElement | HTMLTextAreaElement) {
-    const text = target.value;
-    logger.log("Processing Sentence Translation", { text });
-    if (!text.trim()) {
+    const fullText = target.value;
+    logger.log("Processing Sentence Translation", { fullText });
+
+    if (!fullText.trim()) {
         logger.log("Empty text, skipping.");
         return;
     }
@@ -303,7 +381,7 @@ async function handleSentenceTranslation(target: HTMLInputElement | HTMLTextArea
     useTranslationStore.getState().setLoading(true, target);
 
     try {
-        const result = await translateText(text);
+        const result = await translateText(fullText);
         logger.log("Translation Result:", result);
 
         // 关闭加载状态
@@ -316,11 +394,18 @@ async function handleSentenceTranslation(target: HTMLInputElement | HTMLTextArea
         target.dispatchEvent(new Event('input', { bubbles: true }));
         target.focus();
 
-        target.focus();
+        // 显示 ghost text
+        logger.log("Showing ghost text (Sentence Mode):", {
+            text: result.translatedText,
+            position: 0
+        });
+        useTranslationStore.getState().show(
+            result.translatedText,
+            target,
+            0
+        );
 
-        logger.log("Showing ghost text (Sentence Mode):", { text: result.translatedText, position: 0 });
-        useTranslationStore.getState().show(result.translatedText, target, 0);
-        recordTranslation(text, result.translatedText);
+        recordTranslation(fullText, result.translatedText);
     } catch (err) {
         logger.warn("Translation failed", err);
         // 显示网络错误提示
@@ -335,7 +420,7 @@ async function handleWordTranslation(target: HTMLInputElement | HTMLTextAreaElem
 
     // 重新计算 segments，因为 Space x3 触发时末尾可能有空格
     const cleanTextBeforeCursor = textBeforeCursor.trimEnd();
-    const cleanSegments = cleanTextBeforeCursor.split(' ');
+    const cleanSegments = cleanTextBeforeCursor.split(/[\s,.!?;:，。！？：；]+/);
     // 获取最后一个非空片段作为待翻译文本
     const textToTranslate = cleanSegments[cleanSegments.length - 1];
 
@@ -343,7 +428,12 @@ async function handleWordTranslation(target: HTMLInputElement | HTMLTextAreaElem
     // 也就是最后一个词之前的那个字符的位置
     const segmentStartIndex = cleanTextBeforeCursor.length - textToTranslate.length;
 
-    logger.log("Input Text extraction:", { fullText, textToTranslate, segmentStartIndex, cursorPosition });
+    logger.log("Input Text extraction:", {
+        fullText,
+        textToTranslate,
+        segmentStartIndex,
+        cursorPosition
+    });
 
     const hasChinese = /[\u4e00-\u9fa5]/.test(textToTranslate);
 
@@ -371,6 +461,7 @@ async function handleWordTranslation(target: HTMLInputElement | HTMLTextAreaElem
         // cursorPosition 是光标位置（在空格之后）
         // 我们要删除 segmentStartIndex 到 cursorPosition 之间的所有内容
 
+        // 获取智能连接符
         const before = target.value.slice(0, segmentStartIndex);
         const after = target.value.slice(cursorPosition);
 
@@ -383,8 +474,17 @@ async function handleWordTranslation(target: HTMLInputElement | HTMLTextAreaElem
         target.dispatchEvent(new Event('input', { bubbles: true }));
 
         // 第三步：显示虚影文本
-        logger.log("Showing ghost text:", { text: result.translatedText, position: segmentStartIndex });
-        useTranslationStore.getState().show(result.translatedText, target, segmentStartIndex);
+        logger.log("Showing ghost text:", {
+            text: result.translatedText,
+            position: segmentStartIndex
+        });
+
+        useTranslationStore.getState().show(
+            result.translatedText,
+            target,
+            segmentStartIndex
+        );
+
         recordTranslation(textToTranslate, result.translatedText);
 
         logger.log("Ghost text shown, store state:", useTranslationStore.getState());

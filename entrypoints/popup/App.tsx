@@ -103,6 +103,23 @@ function App() {
             </div>
           )}
 
+          {(config.translationService === 'deepseek' || config.translationService === 'glm') && (
+            <div className="form-group">
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={config.aiWritingAssistant}
+                  onChange={(e) => setConfigState({ ...config, aiWritingAssistant: e.target.checked })}
+                  style={{ cursor: 'pointer' }}
+                />
+                <span>启用AI写作辅导</span>
+              </label>
+              <p className="hint">
+                开启后，按Tab接受翻译时会检查语法错误并提供更地道的表达建议
+              </p>
+            </div>
+          )}
+
           <button onClick={handleSave}>Save Settings</button>
           {status && <p className="status">{status}</p>}
         </div>
