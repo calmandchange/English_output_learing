@@ -102,6 +102,8 @@ export const useTranslationStore = create<GhostTextState>((set, get) => ({
             insertPosition,
             matchedCount: 0,
             hasError: false,
+            consumedLength: 0,
+            inputSegment: '',
             originalAutocomplete,
             originalPlaceholder,
             originalInputMode,
@@ -200,7 +202,9 @@ export const useTranslationStore = create<GhostTextState>((set, get) => ({
             isVisible: false,
             ghostText: '',
             matchedCount: 0,
-            hasError: false
+            hasError: false,
+            consumedLength: 0,
+            inputSegment: ''
         });
     },
 

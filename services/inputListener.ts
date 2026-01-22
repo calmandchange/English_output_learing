@@ -330,8 +330,34 @@ async function handleKeydown(event: KeyboardEvent) {
         const segments = textToCheck.split(/[\s,.!?;:，。！？：；]+/);
         const lastSegment = segments[segments.length - 1];
 
-        const hasChinese = /[\u4e00-\u9fa5]/.test(lastSegment);
-        const hasEnglish = /[a-zA-Z]/.test(lastSegment);
+        // 检测字符类型的辅助函数（支持字符串和单字符）
+        const containsChinese = (str: string) => /[\u4e00-\u9fa5]/.test(str);
+        const containsEnglish = (str: string) => /[a-zA-Z]/.test(str);
+
+        logger.log("Tab 检测 lastSegment:", { lastSegment, textToCheck });
+
+        let hasChinese = containsChinese(lastSegment);
+        let hasEnglish = containsEnglish(lastSegment);
+
+        // 优化：如果 lastSegment 为空或没有有效字符，继续往前查找
+        if (!hasChinese && !hasEnglish && textToCheck.length > 0) {
+            logger.log("lastSegment 无有效字符，向前查找...", { lastSegment });
+
+            // 从 textToCheck 的末尾向前查找，直到找到中文或英文字母
+            for (let i = textToCheck.length - 1; i >= 0; i--) {
+                const char = textToCheck[i];
+                if (containsChinese(char)) {
+                    hasChinese = true;
+                    logger.log("向前查找到中文字符:", char);
+                    break;
+                } else if (containsEnglish(char)) {
+                    hasEnglish = true;
+                    logger.log("向前查找到英文字符:", char);
+                    break;
+                }
+                // 继续跳过符号和空格
+            }
+        }
 
         if (hasChinese) {
             // === 中文 + Tab => 翻译 ===
@@ -355,6 +381,12 @@ async function handleKeydown(event: KeyboardEvent) {
 
         } else if (hasEnglish) {
             // === 英文 + Tab => AI 辅导 ===
+            // 安全检查：确保 chrome.storage 可用
+            if (typeof chrome === 'undefined' || !chrome.storage?.sync) {
+                logger.warn("chrome.storage.sync 不可用，跳过 AI 辅导");
+                return;
+            }
+
             const config = await getConfig();
             if (config.aiWritingAssistant) {
                 logger.log("Context: English detected, triggering AI Coaching");

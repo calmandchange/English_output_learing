@@ -255,7 +255,7 @@ export const ContextSuggestionModal: React.FC = () => {
                                 backgroundColor: '#fafafa'
                             }}
                         >
-                            {/* 类型标签 + 层级 + 类别 */}
+                            {/* 类型 + 类别标签 */}
                             <div style={{
                                 marginBottom: '8px',
                                 display: 'flex',
@@ -263,7 +263,7 @@ export const ContextSuggestionModal: React.FC = () => {
                                 gap: '6px',
                                 alignItems: 'center'
                             }}>
-                                {/* 类型标签 */}
+                                {/* 类型标签（无emoji，用颜色区分） */}
                                 <span style={{
                                     display: 'inline-block',
                                     padding: '2px 8px',
@@ -281,49 +281,10 @@ export const ContextSuggestionModal: React.FC = () => {
                                             ? '#1e40af'
                                             : '#7c3aed'
                                 }}>
-                                    {suggestion.type === 'grammar' ? '🔧 语法' : suggestion.type === 'idiom' ? '💡 地道表达' : '✨ 风格'}
+                                    {suggestion.type === 'grammar' ? '语法' : suggestion.type === 'idiom' ? '地道表达' : '风格'}
                                 </span>
 
-                                {/* 层级标签 */}
-                                {suggestion.level && (
-                                    <span style={{
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '3px',
-                                        padding: '2px 8px',
-                                        borderRadius: '4px',
-                                        fontSize: '10px',
-                                        fontWeight: 600,
-                                        backgroundColor:
-                                            suggestion.level === 1 ? '#ecfdf5' :  // 单词层 - 绿色
-                                                suggestion.level === 2 ? '#eff6ff' :  // 短语层 - 蓝色
-                                                    suggestion.level === 3 ? '#fffbeb' :  // 句子层 - 黄色
-                                                        '#fdf2f8',                            // 语篇层 - 粉色
-                                        color:
-                                            suggestion.level === 1 ? '#047857' :
-                                                suggestion.level === 2 ? '#1d4ed8' :
-                                                    suggestion.level === 3 ? '#b45309' :
-                                                        '#be185d',
-                                        border: `1px solid ${suggestion.level === 1 ? '#a7f3d0' :
-                                            suggestion.level === 2 ? '#bfdbfe' :
-                                                suggestion.level === 3 ? '#fde68a' :
-                                                    '#fbcfe8'
-                                            }`
-                                    }}>
-                                        <span style={{ fontSize: '9px' }}>
-                                            {suggestion.level === 1 ? 'L1' :
-                                                suggestion.level === 2 ? 'L2' :
-                                                    suggestion.level === 3 ? 'L3' : 'L4'}
-                                        </span>
-                                        <span>
-                                            {suggestion.level === 1 ? '单词层' :
-                                                suggestion.level === 2 ? '短语层' :
-                                                    suggestion.level === 3 ? '句子层' : '语篇层'}
-                                        </span>
-                                    </span>
-                                )}
-
-                                {/* 类别标签 */}
+                                {/* 类别标签（中文映射） */}
                                 {suggestion.category && (
                                     <span style={{
                                         display: 'inline-block',
@@ -335,7 +296,31 @@ export const ContextSuggestionModal: React.FC = () => {
                                         color: '#475569',
                                         border: '1px solid #e2e8f0'
                                     }}>
-                                        {suggestion.category}
+                                        {(() => {
+                                            const categoryMap: Record<string, string> = {
+                                                'Subject-Verb Agreement': '主谓一致',
+                                                'Tense': '时态',
+                                                'Article': '冠词',
+                                                'Preposition': '介词',
+                                                'Word Choice': '词汇选择',
+                                                'Spelling': '拼写',
+                                                'Punctuation': '标点',
+                                                'Capitalization': '大小写',
+                                                'Sentence Structure': '句子结构',
+                                                'Word Order': '词序',
+                                                'Parallelism': '平行结构',
+                                                'Modifier': '修饰语',
+                                                'Pronoun': '代词',
+                                                'Number': '单复数',
+                                                'Collocation': '搭配',
+                                                'Idiom': '习语',
+                                                'Register': '语体',
+                                                'Clarity': '清晰度',
+                                                'Conciseness': '简洁性',
+                                                'Coherence': '连贯性'
+                                            };
+                                            return categoryMap[suggestion.category] || suggestion.category;
+                                        })()}
                                     </span>
                                 )}
                             </div>
