@@ -3,8 +3,7 @@ import { getConfig } from './config.ts';
 import { translateText } from './translation.ts';
 import { recordTranslation } from './stats.ts';
 
-const SPACE_KEY_BUFFER_MS = 600;
-const SPACE_KEYS: number[] = [];
+
 
 const logger = {
     log: (msg: string, ...args: any[]) => console.log(`[InputListener] ${msg}`, ...args),
@@ -296,29 +295,70 @@ async function handleKeydown(event: KeyboardEvent) {
 
     if (!isInput) return;
 
-    // Tab 键处理：无虚字时触发写作检测
+    // Tab 键处理：无虚字时触发翻译或写作检测
     if (event.key === 'Tab') {
         const { isVisible, ghostText } = useTranslationStore.getState();
 
-        // 只在无虚字时拦截 Tab（有虚字时由 GhostText 组件处理）
-        if (!isVisible || !ghostText) {
-            const config = await getConfig();
-            // 只有当开启了 AI 助手时才拦截 Tab
-            if (config.aiWritingAssistant) {
-                event.preventDefault();
-                logger.log("Tab pressed without ghost text, triggering writing check");
+        // 1. 虚字可见：由 GhostText 组件处理（补全）
+        if (isVisible && ghostText) {
+            return;
+        }
 
-                // 获取光标位置
-                let cursorPosition = 0;
-                if (deepTarget instanceof HTMLInputElement || deepTarget instanceof HTMLTextAreaElement) {
-                    cursorPosition = deepTarget.selectionStart || deepTarget.value.length;
+        // 2. 虚字不可见：检查文本内容
+        logger.log("Tab pressed without ghost text, checking context...");
+
+        let fullText = '';
+        let cursorPosition = 0;
+
+        if (deepTarget instanceof HTMLInputElement || deepTarget instanceof HTMLTextAreaElement) {
+            fullText = deepTarget.value;
+            cursorPosition = deepTarget.selectionStart || fullText.length;
+        } else if (deepTarget.isContentEditable) {
+            fullText = getContentEditableText(deepTarget);
+            // 简化处理：contentEditable 暂取末尾，更精确的光标位置获取比较复杂
+            // TODO: 优化 contentEditable 的光标位置获取
+            const selection = window.getSelection();
+            if (selection && selection.rangeCount > 0) {
+                cursorPosition = fullText.length; // 暂时假设在末尾
+            }
+        }
+
+        const textBeforeCursor = fullText.slice(0, cursorPosition);
+        const textToCheck = textBeforeCursor.trimEnd();
+
+        // 提取最后一个片段进行检测（类似于原来的 Word 模式逻辑）
+        const segments = textToCheck.split(/[\s,.!?;:，。！？：；]+/);
+        const lastSegment = segments[segments.length - 1];
+
+        const hasChinese = /[\u4e00-\u9fa5]/.test(lastSegment);
+        const hasEnglish = /[a-zA-Z]/.test(lastSegment);
+
+        if (hasChinese) {
+            // === 中文 + Tab => 翻译 ===
+            logger.log("Context: Chinese detected, triggering Translation");
+            event.preventDefault();
+
+            if (deepTarget instanceof HTMLInputElement || deepTarget instanceof HTMLTextAreaElement) {
+                // 使用空格判断句子/单词模式 (保持原有逻辑)
+                if (/\s/.test(textToCheck)) {
+                    await handleWordTranslation(deepTarget);
                 } else {
-                    const selection = window.getSelection();
-                    if (selection && selection.rangeCount > 0) {
-                        // 简化的 contentEditable 光标位置获取
-                        cursorPosition = deepTarget.innerText.length;
-                    }
+                    await handleSentenceTranslation(deepTarget);
                 }
+            } else if (deepTarget.isContentEditable) {
+                if (/\s/.test(textToCheck)) {
+                    await handleContentEditableWordTranslation(deepTarget);
+                } else {
+                    await handleContentEditableSentenceTranslation(deepTarget);
+                }
+            }
+
+        } else if (hasEnglish) {
+            // === 英文 + Tab => AI 辅导 ===
+            const config = await getConfig();
+            if (config.aiWritingAssistant) {
+                logger.log("Context: English detected, triggering AI Coaching");
+                event.preventDefault();
 
                 // 设置 targetElement 和插入位置
                 useTranslationStore.setState({
@@ -329,61 +369,8 @@ async function handleKeydown(event: KeyboardEvent) {
                 // 触发写作检测
                 useTranslationStore.getState().triggerWritingCheck();
             }
-        }
-        return;
-    }
-
-    // Space x3 Logic
-    if ((event.key === ' ' || event.code === 'Space') && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
-        const now = Date.now();
-        while (SPACE_KEYS.length > 0 && now - SPACE_KEYS[0] > SPACE_KEY_BUFFER_MS) {
-            SPACE_KEYS.shift();
-        }
-        SPACE_KEYS.push(now);
-        logger.log(`Space Count in Buffer: ${SPACE_KEYS.length}`, SPACE_KEYS);
-
-        if (SPACE_KEYS.length >= 3) {
-            logger.log("Triggering Translation (Space x3)");
-
-            // 处理标准输入框
-            if (deepTarget instanceof HTMLInputElement || deepTarget instanceof HTMLTextAreaElement) {
-                const fullText = deepTarget.value;
-                const cursorPosition = deepTarget.selectionStart || fullText.length;
-                const textBeforeCursor = fullText.slice(0, cursorPosition).trimEnd();
-
-                // 使用空格判断句子/单词模式
-                if (/\s/.test(textBeforeCursor)) {
-                    logger.log("Space x3: Detected word mode (contains spaces)");
-                    await handleWordTranslation(deepTarget);
-                } else {
-                    logger.log("Space x3: Detected sentence mode (no spaces or punctuation)");
-                    await handleSentenceTranslation(deepTarget);
-                }
-            }
-            // 处理 contenteditable 元素 (如 Reddit 评论框)
-            else if (deepTarget.isContentEditable) {
-                logger.log("Space x3: Handling contenteditable element");
-                const textContent = getContentEditableText(deepTarget);
-                const textBeforeCursor = textContent.trimEnd();
-                logger.log("Contenteditable text:", { textContent, textBeforeCursor });
-
-                // 使用空格判断句子/单词模式
-                if (/\s/.test(textBeforeCursor)) {
-                    logger.log("Space x3 (contenteditable): Detected word mode");
-                    await handleContentEditableWordTranslation(deepTarget);
-                } else {
-                    logger.log("Space x3 (contenteditable): Detected sentence mode");
-                    await handleContentEditableSentenceTranslation(deepTarget);
-                }
-            }
-            SPACE_KEYS.length = 0;
-        }
-    } else {
-        if (event.key.length === 1) {
-            if (SPACE_KEYS.length > 0) {
-                logger.log("Resetting Space Buffer due to other key press", event.key);
-                SPACE_KEYS.length = 0;
-            }
+        } else {
+            logger.log("Context: No specific trigger detected, allowing default Tab behavior");
         }
     }
 }

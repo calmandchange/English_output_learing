@@ -9,7 +9,7 @@ import {
   TodayStats,
   updateStreakDays
 } from '@/services/stats';
-import html2canvas from 'html2canvas'; // Ensure this is installed
+// html2canvas 已移除 - 因 CSP 阻止 eval 无法在扩展中使用
 import './App.css';
 
 type TabType = 'home' | 'settings' | 'history' | 'help';
@@ -307,22 +307,16 @@ function App() {
   };
 
   const handleShare = async () => {
-    const element = document.getElementById('share-card-element');
-    if (!element) return;
-
+    // 由于 Chrome 扩展 CSP 限制，html2canvas 无法使用
+    // 改为复制学习数据到剪贴板
+    const shareText = `📚 English Output Learning 学习打卡\n\n🌱 今日单词: ${todayStats.totalWords}\n📖 翻译次数: ${todayStats.totalTranslations}\n🔥 连续天数: ${todayStats.streakDays}\n\n📅 ${new Date().toLocaleDateString()}`;
+    
     try {
-      const canvas = await html2canvas(element, {
-        backgroundColor: '#0F172A', // Match bg-dark
-        scale: 2 // High resolution
-      });
-
-      const link = document.createElement('a');
-      link.download = `EOL-Study-Share-${new Date().toISOString().slice(0, 10)}.png`;
-      link.href = canvas.toDataURL();
-      link.click();
+      await navigator.clipboard.writeText(shareText);
+      alert('学习数据已复制到剪贴板！可粘贴分享给好友');
     } catch (err) {
-      console.error('Share failed:', err);
-      alert('生成截图失败，请重试');
+      console.error('Copy failed:', err);
+      alert('复制失败，请重试');
     }
   };
 

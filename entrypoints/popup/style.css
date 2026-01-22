@@ -1,5 +1,5 @@
-/* Google Fonts - Inter for professional look */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* 使用系统字体栈，避免 Chrome 扩展 CSP 阻止外部资源加载 */
+/* Inter 字体由系统字体模拟 */
 
 :root {
   /* Primary - Logo Blue */

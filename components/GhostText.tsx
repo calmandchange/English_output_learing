@@ -309,21 +309,12 @@ export const GhostText = () => {
                     if (config.tabAcceptsGhostText) {
                         e.preventDefault();
                         acceptGhost();
-                        // 如果开启了 AI 辅导，也触发检测
-                        if (config.aiWritingAssistant) {
-                            useTranslationStore.getState().triggerWritingCheck();
-                        }
+                        // 注意：补全虚字后不触发 AI 辅导
+                        // AI 辅导只在「无虚字时按 Tab」才触发（由 inputListener.ts 处理）
                     }
                     // 如果 tabAcceptsGhostText 为 false，不阻止默认行为（移动焦点）
-                } else {
-                    // 无虚字 → 触发写作检测（inputListener 也会处理，这里是针对 GhostText 聚焦时的双重保障，
-                    // 但通常无虚字时 GhostText 组件可能不可见。如果可见但无 ghostText (e.g. error state?), Check Config）
-                    // 实际上 GhostText 如果没有 text 通常 render null。
-                    // 但 useEffect 绑定在 targetElement 上，所以即使 GhostText 组件 return null，effect 里的 listener 依然可能存在？
-                    // 不，Effect 依赖 isVisible。
-                    e.preventDefault();
-                    useTranslationStore.getState().triggerWritingCheck();
                 }
+                // 无虚字的情况由 inputListener.ts 处理，这里不需要重复处理
             } else if (e.key === 'Escape') {
                 hide();
             }
