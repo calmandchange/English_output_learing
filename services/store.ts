@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { WritingSuggestion } from './llm';
+import { recordWritingError } from './insights';
 
 // 保留旧接口用于兼容
 interface GhostSuggestion {
@@ -182,11 +183,11 @@ export const useTranslationStore = create<GhostTextState>((set, get) => ({
 
             // 将光标移到插入位置之后
             const selection = window.getSelection();
+            const newCursorPos = cursorPos + remaining.length;
             if (selection && targetElement.childNodes.length > 0) {
                 const range = document.createRange();
                 const textNode = targetElement.firstChild;
                 if (textNode) {
-                    const newCursorPos = cursorPos + remaining.length;
                     range.setStart(textNode, Math.min(newCursorPos, textNode.textContent?.length || 0));
                     range.collapse(true);
                     selection.removeAllRanges();
@@ -363,6 +364,15 @@ export const useTranslationStore = create<GhostTextState>((set, get) => ({
         const { suggestions, targetElement } = get();
         const suggestion = suggestions[index];
         if (!suggestion || !targetElement) return;
+
+        // 记录错误类型，用于学习洞察统计
+        recordWritingError({
+            type: suggestion.type,
+            level: suggestion.level,
+            category: suggestion.category,
+            original: suggestion.original,
+            suggested: suggestion.suggested,
+        });
 
         // 获取当前内容
         const currentContent = (targetElement instanceof HTMLInputElement || targetElement instanceof HTMLTextAreaElement)

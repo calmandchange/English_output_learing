@@ -428,13 +428,60 @@ export const ContextSuggestionModal: React.FC = () => {
 
                             {/* 原因说明 */}
                             <p style={{
-                                margin: '0 0 12px 0',
+                                margin: '0 0 8px 0',
                                 fontSize: '12px',
                                 color: '#6b7280',
                                 lineHeight: 1.5
                             }}>
                                 {suggestion.reason}
                             </p>
+
+                            {/* 知识点关联 */}
+                            {(suggestion.relatedGrammar || (suggestion.similarExamples && suggestion.similarExamples.length > 0)) && (
+                                <div style={{
+                                    marginBottom: '12px',
+                                    padding: '8px 12px',
+                                    backgroundColor: '#f0f9ff',
+                                    borderRadius: '6px',
+                                    borderLeft: '3px solid #3b82f6'
+                                }}>
+                                    {suggestion.relatedGrammar && (
+                                        <div style={{
+                                            fontSize: '11px',
+                                            color: '#1e40af',
+                                            fontWeight: 500,
+                                            marginBottom: suggestion.similarExamples?.length ? '6px' : '0'
+                                        }}>
+                                            📖 {suggestion.relatedGrammar}
+                                        </div>
+                                    )}
+                                    {suggestion.similarExamples && suggestion.similarExamples.length > 0 && (
+                                        <div style={{ fontSize: '11px', color: '#475569' }}>
+                                            <span style={{ fontWeight: 500 }}>💡 类似表达：</span>
+                                            <div style={{
+                                                marginTop: '4px',
+                                                display: 'flex',
+                                                flexDirection: 'column',
+                                                gap: '2px'
+                                            }}>
+                                                {suggestion.similarExamples.slice(0, 2).map((example, i) => (
+                                                    <span key={i} style={{
+                                                        fontFamily: 'monospace',
+                                                        fontSize: '11px',
+                                                        color: '#166534',
+                                                        backgroundColor: '#dcfce7',
+                                                        padding: '2px 6px',
+                                                        borderRadius: '3px',
+                                                        display: 'inline-block'
+                                                    }}>
+                                                        {example}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             {/* 操作按钮 */}
                             <div style={{

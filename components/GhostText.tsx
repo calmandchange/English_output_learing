@@ -297,25 +297,9 @@ export const GhostText = () => {
             updateMatch(elementValue);
         };
 
-        // ... (existing imports)
-
-        // ...
-
-        const handleKeyDown = async (e: KeyboardEvent) => {
-            if (e.key === 'Tab') {
-                // 有虚字 → 检查配置决定是否补全
-                if (ghostText) {
-                    const config = await getConfig();
-                    if (config.tabAcceptsGhostText) {
-                        e.preventDefault();
-                        acceptGhost();
-                        // 注意：补全虚字后不触发 AI 辅导
-                        // AI 辅导只在「无虚字时按 Tab」才触发（由 inputListener.ts 处理）
-                    }
-                    // 如果 tabAcceptsGhostText 为 false，不阻止默认行为（移动焦点）
-                }
-                // 无虚字的情况由 inputListener.ts 处理，这里不需要重复处理
-            } else if (e.key === 'Escape') {
+        // Tab 键处理已移至 inputListener.ts，这里只处理 Escape
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
                 hide();
             }
         };

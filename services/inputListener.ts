@@ -299,8 +299,12 @@ async function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Tab') {
         const { isVisible, ghostText } = useTranslationStore.getState();
 
-        // 1. 虚字可见：由 GhostText 组件处理（补全）
+        // 1. 虚字可见：先阻止默认行为，再由 GhostText 组件处理（补全）
         if (isVisible && ghostText) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            // 直接调用 acceptGhost，因为 GhostText 的监听器可能来不及处理
+            useTranslationStore.getState().acceptGhost();
             return;
         }
 

@@ -9,10 +9,14 @@ import {
   TodayStats,
   updateStreakDays
 } from '@/services/stats';
+import { getLearningInsights, LearningInsight } from '@/services/insights';
+import { addToVocabulary, getVocabulary, getWordsForReview, PersonalVocabulary, updateMastery, removeFromVocabulary } from '@/services/vocabulary';
+import { checkAchievements, getUnlockedAchievements, Achievement } from '@/services/achievements';
+import { Onboarding } from '@/components/Onboarding';
 // html2canvas 已移除 - 因 CSP 阻止 eval 无法在扩展中使用
 import './App.css';
 
-type TabType = 'home' | 'settings' | 'history' | 'help';
+type TabType = 'home' | 'vocabulary' | 'settings' | 'history' | 'help';
 
 // SVG Icons
 const Icons = {
@@ -103,6 +107,28 @@ const Icons = {
       <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
       <polyline points="16 6 12 2 8 6" />
       <line x1="12" y1="2" x2="12" y2="15" />
+    </svg>
+  ),
+  star: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
+  ),
+  trash: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    </svg>
+  ),
+  check: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  ),
+  award: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="8" r="7" />
+      <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88" />
     </svg>
   )
 };
@@ -236,9 +262,9 @@ const ShareCard = ({ stats, treeStage, customJson }: { stats: TodayStats, treeSt
   return (
     <div id="share-card-element" className="screenshot-container">
       <div className="screenshot-header">
-        <img src="/icon/128.png" style={{ width: '48px', height: '48px', borderRadius: '8px' }} />
+        <img src="/icon.png" style={{ width: '48px', height: '48px', borderRadius: '8px' }} />
         <div>
-          <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>English Output Learning</div>
+          <div style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>敲敲学英语</div>
           <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>今日学习打卡</div>
         </div>
       </div>
@@ -272,22 +298,45 @@ function App() {
   const [stats, setStats] = useState<TranslationStat[]>([]);
   const [todayStats, setTodayStats] = useState<TodayStats>({ totalTranslations: 0, newWords: 0, streakDays: 0, totalWords: 0 });
   const [recentLearning, setRecentLearning] = useState<TranslationStat[]>([]);
+  const [insight, setInsight] = useState<LearningInsight | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  // IKEA 效应 - 词库和成就
+  const [vocabulary, setVocabulary] = useState<PersonalVocabulary[]>([]);
+  const [reviewWords, setReviewWords] = useState<PersonalVocabulary[]>([]);
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [favStatus, setFavStatus] = useState<Record<string, 'idle' | 'added' | 'exists'>>({});
 
   useEffect(() => {
-    getConfig().then(setConfigState);
+    getConfig().then((cfg) => {
+      setConfigState(cfg);
+      // 首次使用时显示引导
+      if (!cfg.onboardingCompleted) {
+        setShowOnboarding(true);
+      }
+    });
     loadData();
     updateStreakDays(); // Check streak on load
   }, []);
 
   const loadData = async () => {
-    const [statsData, todayData, recentData] = await Promise.all([
+    const [statsData, todayData, recentData, insightData, vocabData, reviewData, achievementsData] = await Promise.all([
       getTranslationStats(),
       getTodayStats(),
-      getRecentLearning(5)
+      getRecentLearning(5),
+      getLearningInsights(),
+      getVocabulary(),
+      getWordsForReview(),
+      getUnlockedAchievements(),
     ]);
     setStats(statsData);
     setTodayStats(todayData);
     setRecentLearning(recentData);
+    setInsight(insightData);
+    setVocabulary(vocabData);
+    setReviewWords(reviewData);
+    setAchievements(achievementsData);
+    // 检查新成就
+    checkAchievements();
   };
 
   const handleSave = async () => {
@@ -306,11 +355,60 @@ function App() {
     }
   };
 
+  const handleAddToVocab = async (english: string, chinese: string) => {
+    const success = await addToVocabulary(english, chinese);
+    if (success) {
+      setFavStatus(prev => ({ ...prev, [english]: 'added' }));
+      setTimeout(() => setFavStatus(prev => ({ ...prev, [english]: 'exists' })), 2000);
+
+      // 刷新词库数据
+      const [vocabData, reviewData] = await Promise.all([getVocabulary(), getWordsForReview()]);
+      setVocabulary(vocabData);
+      setReviewWords(reviewData);
+
+      // 检查成就
+      checkAchievements().then(newItems => {
+        if (newItems.length > 0) {
+          setAchievements(prev => [...prev, ...newItems]);
+          alert(`解锁新成就：${newItems.map(a => a.name).join(', ')}`);
+        }
+      });
+    } else {
+      setFavStatus(prev => ({ ...prev, [english]: 'exists' }));
+    }
+  };
+
+  const handleRemoveFromVocab = async (word: string) => {
+    if (confirm(`确定要从生词本移除 "${word}" 吗？`)) {
+      await removeFromVocabulary(word);
+      const vocabData = await getVocabulary();
+      setVocabulary(vocabData);
+      setReviewWords(await getWordsForReview());
+      setFavStatus(prev => {
+        const next = { ...prev };
+        delete next[word];
+        return next;
+      });
+    }
+  };
+
+  const handleUpdateMastery = async (word: string, currentMastery: number) => {
+    const newMastery = Math.min(currentMastery + 1, 3) as 0 | 1 | 2 | 3;
+    await updateMastery(word, newMastery);
+    setVocabulary(await getVocabulary());
+    setReviewWords(await getWordsForReview());
+
+    // 检查成就
+    checkAchievements().then(newItems => {
+      if (newItems.length > 0) setAchievements(prev => [...prev, ...newItems]);
+    });
+  };
+
   const handleShare = async () => {
     // 由于 Chrome 扩展 CSP 限制，html2canvas 无法使用
     // 改为复制学习数据到剪贴板
-    const shareText = `📚 English Output Learning 学习打卡\n\n🌱 今日单词: ${todayStats.totalWords}\n📖 翻译次数: ${todayStats.totalTranslations}\n🔥 连续天数: ${todayStats.streakDays}\n\n📅 ${new Date().toLocaleDateString()}`;
-    
+    const shareText = `📚 敲敲学英语 学习打卡\n\n🌱 今日单词: ${todayStats.totalWords}\n📖 翻译次数: ${todayStats.totalTranslations}\n🔥 连续天数: ${todayStats.streakDays}\n⭐ 掌握词汇: ${vocabulary.filter(v => v.mastery === 3).length}\n\n📅 ${new Date().toLocaleDateString()}`;
+
     try {
       await navigator.clipboard.writeText(shareText);
       alert('学习数据已复制到剪贴板！可粘贴分享给好友');
@@ -320,7 +418,18 @@ function App() {
     }
   };
 
+  // 完成引导回调
+  const handleOnboardingComplete = () => {
+    setShowOnboarding(false);
+    getConfig().then(setConfigState); // 重新加载配置
+  };
+
   if (!config) return <div className="loading">Loading...</div>;
+
+  // 显示首次使用引导
+  if (showOnboarding) {
+    return <Onboarding onComplete={handleOnboardingComplete} />;
+  }
 
   const currentStage = getTreeStage(todayStats.totalWords || 0);
 
@@ -328,8 +437,8 @@ function App() {
     <div className="container">
       {/* Header */}
       <div className="header">
-        <img src="/icon/128.png" className="logo" alt="English Output Learning" />
-        <span className="header-title">English Output Learning</span>
+        <img src="/icon.png" className="logo" alt="敲敲学英语" />
+        <span className="header-title">敲敲学英语</span>
         {activeTab === 'home' && (
           <button className="share-btn" onClick={handleShare} aria-label="生成学习海报" title="点击生成学习打卡海报">
             {Icons.camera}
@@ -386,34 +495,167 @@ function App() {
               <ul className="recent-list">
                 {recentLearning.map((item, index) => (
                   <li key={index} className="recent-item">
-                    <div className="recent-icon">{Icons.type}</div>
                     <div className="recent-content">
                       <div className="recent-english">{item.englishText}</div>
                       <div className="recent-chinese">{item.chineseText}</div>
                     </div>
-                    <span className="recent-count">{item.count}次</span>
+                    <div className="recent-actions">
+                      <span className="recent-count">{item.count}次</span>
+                      <button
+                        className={`fav-btn ${favStatus[item.englishText] === 'added' ? 'added' : ''}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAddToVocab(item.englishText, item.chineseText);
+                        }}
+                        title={favStatus[item.englishText] === 'exists' ? '已在词库中' : '添加到词库'}
+                        disabled={favStatus[item.englishText] === 'exists'}
+                      >
+                        {favStatus[item.englishText] === 'exists' ? Icons.check : Icons.star}
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
             )}
           </div>
 
-          {/* Quick Tips */}
-          <div className="tips-card">
-            <div className="tips-title">
-              {Icons.lightbulb}
-              <span>快速上手</span>
+          {/* Learning Insights */}
+          {insight && insight.commonMistakes.length > 0 && (
+            <>
+              <div className="section-title">
+                {Icons.lightbulb}
+                <span>学习洞察</span>
+              </div>
+              <div className="insight-card">
+                <div className="insight-header">
+                  <span className="insight-icon">📈</span>
+                  <span className="insight-title">本周重点</span>
+                </div>
+                <div className="insight-content">
+                  <div className="insight-mistake">
+                    <span className="mistake-label">常见问题：</span>
+                    <span className="mistake-category">{insight.commonMistakes[0].category}</span>
+                    <span className="mistake-count">({insight.commonMistakes[0].count}次)</span>
+                  </div>
+                  {insight.commonMistakes[0].examples.length > 0 && (
+                    <div className="insight-examples">
+                      {insight.commonMistakes[0].examples.slice(0, 2).map((example, i) => (
+                        <div key={i} className="example-item">{example}</div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="insight-recommendation">
+                    💡 {insight.commonMistakes[0].suggestion}
+                  </div>
+                </div>
+                <div className="insight-trend">
+                  <span className="trend-label">词汇趋势：</span>
+                  <span className={`trend-value ${insight.vocabularyGrowth.trend}`}>
+                    {insight.vocabularyGrowth.trend === 'up' ? '📈 上升' :
+                      insight.vocabularyGrowth.trend === 'down' ? '📉 下降' : '➡️ 稳定'}
+                  </span>
+                  <span className="trend-detail">
+                    本周 {insight.vocabularyGrowth.thisWeek} 词
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Review Card */}
+          {reviewWords.length > 0 && (
+            <>
+              <div className="section-title">
+                {Icons.book}
+                <span>今日复习 ({reviewWords.length})</span>
+              </div>
+              <div className="review-card">
+                {reviewWords.slice(0, 10).map((word, index) => (
+                  <div key={index} className="review-item">
+                    <div className="review-word">
+                      <span className="word-text">{word.word}</span>
+                      <span className="word-trans">{word.translation}</span>
+                    </div>
+                    <button
+                      className="review-btn"
+                      onClick={() => handleUpdateMastery(word.word, word.mastery)}
+                      title="标记为已复习"
+                    >
+                      {Icons.check}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Achievements */}
+          {achievements.length > 0 && (
+            <div className="achievements-section">
+              <div className="section-title">
+                {Icons.award}
+                <span>成就 ({achievements.length})</span>
+              </div>
+              <div className="achievement-badges">
+                {achievements.map(a => (
+                  <div key={a.id} className="achievement-badge" title={a.description}>
+                    <span className="badge-icon">{a.icon}</span>
+                    <span className="badge-name">{a.name}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="tips-content">
-              <div className="tip-item">
-                <strong>翻译：</strong>输入中文后 <code>空格 × 3</code>
-              </div>
-              <div className="tip-item">
-                <strong>AI辅导：</strong>无虚字时按 <code>Tab</code>
-              </div>
+          )}
+
+
+        </>
+      )}
+
+      {/* Vocabulary Tab */}
+      {activeTab === 'vocabulary' && (
+        <div className="card vocabulary-card">
+          <div className="vocab-header">
+            <h2>我的词库 ({vocabulary.length})</h2>
+            <div className="vocab-stats">
+              <span className="stat-pill mastered">掌握: {vocabulary.filter(v => v.mastery === 3).length}</span>
+              <span className="stat-pill learning">学习中: {vocabulary.filter(v => v.mastery < 3).length}</span>
             </div>
           </div>
-        </>
+
+          {vocabulary.length === 0 ? (
+            <div className="empty-state">
+              {Icons.star}
+              <p>还没收藏单词呢<br />去翻译几个试试吧</p>
+            </div>
+          ) : (
+            <ul className="vocab-list">
+              {vocabulary.map((item, index) => (
+                <li key={index} className="vocab-item">
+                  <div className="vocab-main">
+                    <div className="vocab-word">{item.word}</div>
+                    <div className="vocab-trans">{item.translation}</div>
+                  </div>
+                  <div className="vocab-meta">
+                    <div className="mastery-indicator">
+                      {[0, 1, 2].map(level => (
+                        <div
+                          key={level}
+                          className={`mastery-dot ${item.mastery > level ? 'active' : ''}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    className="delete-btn"
+                    onClick={() => handleRemoveFromVocab(item.word)}
+                  >
+                    {Icons.trash}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
 
       {/* Settings Tab */}
@@ -603,6 +845,14 @@ function App() {
         >
           {Icons.home}
           <span>首页</span>
+        </button>
+        <button
+          className={`nav-btn ${activeTab === 'vocabulary' ? 'active' : ''}`}
+          onClick={() => { setActiveTab('vocabulary'); loadData(); }}
+          aria-label="词库"
+        >
+          {Icons.star}
+          <span>词库</span>
         </button>
         <button
           className={`nav-btn ${activeTab === 'settings' ? 'active' : ''}`}

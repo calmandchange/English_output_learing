@@ -1,0 +1,10 @@
+{
+    "extensionName": {
+        "message": "敲敲学英语 - 敲敲英语，悄悄学会",
+        "description": "Name of the extension"
+    },
+    "extensionDescription": {
+        "message": "敲敲打打，英语自来 - 输出式英语学习助手",
+        "description": "Description of the extension"
+    }
+}

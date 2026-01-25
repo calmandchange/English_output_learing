@@ -15,3 +15,299 @@
 .logo:hover {
   transform: scale(1.05);
 }
+
+/* IKEA Effect Styles */
+
+/* 收藏按钮 */
+.recent-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fav-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.3);
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fav-btn:hover {
+  color: var(--primary-400, #fbbf24);
+  transform: scale(1.1);
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+.fav-btn svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.fav-btn.added {
+  color: var(--warning, #fbbf24);
+  animation: pop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes pop {
+  0% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.4);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* 复习卡片 */
+.review-card {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  /* 两列布局 */
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.review-item {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.2s;
+}
+
+.review-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.review-word {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.word-text {
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+}
+
+.word-trans {
+  font-size: 0.8rem;
+  color: var(--text-secondary, #9ca3af);
+}
+
+.review-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--success, #4ade80);
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.2s;
+}
+
+.review-item:hover .review-btn {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.review-btn:hover {
+  background: var(--success, #4ade80);
+  color: #000;
+}
+
+/* 成就区域 */
+.achievements-section {
+  margin-top: 24px;
+}
+
+.achievement-badges {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scrollbar-width: none;
+  /* Firefox */
+}
+
+.achievement-badges::-webkit-scrollbar {
+  display: none;
+  /* Chrome/Safari */
+}
+
+.achievement-badge {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 80px;
+  transition: all 0.2s;
+}
+
+.achievement-badge:hover {
+  transform: translateY(-2px);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.08));
+  border-color: var(--primary-500, #3b82f6);
+}
+
+.badge-icon {
+  font-size: 1.5rem;
+  margin-bottom: 4px;
+}
+
+.badge-name {
+  font-size: 0.75rem;
+  color: var(--text-secondary, #9ca3af);
+  white-space: nowrap;
+}
+
+/* 词库页面 */
+.vocabulary-card {
+  min-height: 400px;
+}
+
+.vocab-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.vocab-header h2 {
+  font-size: 1.2rem;
+  margin: 0;
+}
+
+.vocab-stats {
+  display: flex;
+  gap: 8px;
+}
+
+.stat-pill {
+  font-size: 0.75rem;
+  padding: 4px 8px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.stat-pill.mastered {
+  color: var(--success, #4ade80);
+  background: rgba(74, 222, 128, 0.1);
+}
+
+.stat-pill.learning {
+  color: var(--warning, #fbbf24);
+  background: rgba(251, 191, 36, 0.1);
+}
+
+.vocab-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vocab-item {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+}
+
+.vocab-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.vocab-main {
+  flex: 1;
+}
+
+.vocab-word {
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+}
+
+.vocab-trans {
+  font-size: 0.85rem;
+  color: var(--text-secondary, #9ca3af);
+  margin-top: 2px;
+}
+
+.vocab-meta {
+  margin-right: 12px;
+}
+
+.mastery-indicator {
+  display: flex;
+  gap: 4px;
+}
+
+.mastery-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  transition: all 0.3s;
+}
+
+.mastery-dot.active {
+  background: var(--success, #4ade80);
+  box-shadow: 0 0 4px var(--success, #4ade80);
+}
+
+.delete-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+}
+
+.delete-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger, #ef4444);
+}
+
+/* Recent Item Layout Update */
+.recent-item {
+  /* Update existing class to handle flex better */
+  justify-content: space-between;
+}
+
+.recent-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

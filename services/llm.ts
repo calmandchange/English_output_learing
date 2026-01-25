@@ -82,10 +82,15 @@ Only return the translated text without any explanation.`
         }
 
         const data: LLMResponse = await response.json();
-        const translatedText = data.choices[0]?.message?.content?.trim();
+        let translatedText = data.choices[0]?.message?.content?.trim();
 
         if (!translatedText) {
             throw new Error(`${providerName} returned empty response`);
+        }
+
+        // 移除可能存在的首尾引号 (即使 System Prompt 告知不要带引号，LLM 仍可能包含)
+        if (translatedText.startsWith('"') && translatedText.endsWith('"') && translatedText.length >= 2) {
+            translatedText = translatedText.slice(1, -1);
         }
 
         return translatedText;
@@ -199,6 +204,8 @@ export interface WritingSuggestion {
     fullSentence: string;       // 完整的原句
     correctedSentence: string;  // 修正后的完整句子
     reason: string;             // 原因说明（包含为什么更地道的解释）
+    relatedGrammar?: string;    // 相关语法知识点（如："参见：现在完成时用法"）
+    similarExamples?: string[]; // 类似表达示例（如：["I really enjoy...", "I'm fond of..."]）
 }
 
 /**
@@ -382,6 +389,10 @@ This level catches expressions that are grammatically correct but unnatural to n
 10. PRIORITY: Spelling > Grammar > Chinglish > Word Choice > Style
 11. USE ORIGINAL TEXT ONLY: "fullSentence" must be exact original input
 
+**TEACHING ENHANCEMENT (NEW):**
+12. relatedGrammar: Provide a concise grammar rule reference in Chinese (e.g., "参见：现在完成时用法")
+13. similarExamples: Provide 1-2 correct native examples using the suggested pattern
+
 Return ONLY a valid JSON array:
 [
   {
@@ -393,7 +404,9 @@ Return ONLY a valid JSON array:
     "suggested": "corrected word(s) only",
     "fullSentence": "complete original sentence",
     "correctedSentence": "complete corrected sentence",
-    "reason": "中文解释（说明为什么更地道）"
+    "reason": "中文解释（说明为什么更地道）",
+    "relatedGrammar": "相关语法知识点（如：副词修饰规则）",
+    "similarExamples": ["正确用法示例1", "正确用法示例2"]
   }
 ]
 

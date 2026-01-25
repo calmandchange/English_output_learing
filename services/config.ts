@@ -7,6 +7,7 @@ export interface AppConfig {
     aiWritingAssistant: boolean;
     customAnimationJson?: string; // 用户粘贴的 Lottie JSON 字符串
     tabAcceptsGhostText: boolean; // 是否允许 Tab 键接受虚字
+    onboardingCompleted: boolean; // 是否完成首次使用引导
 }
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -15,11 +16,12 @@ export const DEFAULT_CONFIG: AppConfig = {
     glmApiKey: '',
     aiWritingAssistant: false,
     customAnimationJson: '',
-    tabAcceptsGhostText: false
+    tabAcceptsGhostText: true, // 默认开启，大多数用户期望这个行为
+    onboardingCompleted: false // 首次使用引导未完成
 };
 
 export async function getConfig(): Promise<AppConfig> {
-    const result = await chrome.storage.sync.get(['translationService', 'deepseekApiKey', 'glmApiKey', 'aiWritingAssistant', 'customAnimationJson', 'tabAcceptsGhostText']) as any;
+    const result = await chrome.storage.sync.get(['translationService', 'deepseekApiKey', 'glmApiKey', 'aiWritingAssistant', 'customAnimationJson', 'tabAcceptsGhostText', 'onboardingCompleted']) as any;
     return {
         translationService: (result.translationService as TranslationService) || DEFAULT_CONFIG.translationService,
         deepseekApiKey: (result.deepseekApiKey as string) || DEFAULT_CONFIG.deepseekApiKey,
@@ -27,6 +29,7 @@ export async function getConfig(): Promise<AppConfig> {
         aiWritingAssistant: (result.aiWritingAssistant as boolean) ?? DEFAULT_CONFIG.aiWritingAssistant,
         customAnimationJson: (result.customAnimationJson as string) || DEFAULT_CONFIG.customAnimationJson,
         tabAcceptsGhostText: (result.tabAcceptsGhostText as boolean) ?? DEFAULT_CONFIG.tabAcceptsGhostText,
+        onboardingCompleted: (result.onboardingCompleted as boolean) ?? DEFAULT_CONFIG.onboardingCompleted,
     };
 }
 
