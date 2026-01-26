@@ -87,15 +87,6 @@ export const useTranslationStore = create<GhostTextState>((set, get) => ({
         targetElement.setAttribute('inputmode', 'latin');
         targetElement.setAttribute('lang', 'en');
 
-        if (targetElement instanceof HTMLInputElement || targetElement instanceof HTMLTextAreaElement) {
-            targetElement.blur();
-            setTimeout(() => {
-                targetElement.focus();
-                // 恢复光标位置
-                targetElement.setSelectionRange(insertPosition, insertPosition);
-            }, 10);
-        }
-
         set({
             isVisible: true,
             ghostText: text,

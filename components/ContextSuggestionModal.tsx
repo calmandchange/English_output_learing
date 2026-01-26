@@ -70,25 +70,8 @@ export const ContextSuggestionModal: React.FC = () => {
         }
     }, [isDragging, handleMouseMove, handleMouseUp]);
 
-    // Tab 键监听：有建议弹窗时按 Tab 一键应用所有
-    useEffect(() => {
-        if (suggestions.length === 0) return;
 
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Tab') {
-                e.preventDefault();
-                e.stopPropagation();
-                acceptAllSuggestions();
-            }
-        };
-
-        // 使用 capture 阶段确保优先处理
-        document.addEventListener('keydown', handleKeyDown, true);
-
-        return () => {
-            document.removeEventListener('keydown', handleKeyDown, true);
-        };
-    }, [suggestions.length, acceptAllSuggestions]);
+    // Tab 键处理已移至 inputListener.ts 统一处理
 
     // 关闭所有建议
     const handleCloseAll = () => {
@@ -96,33 +79,34 @@ export const ContextSuggestionModal: React.FC = () => {
         setPosition(null);
     };
 
-    // 如果正在检测中，显示加载状态
-    if (isCheckingWriting) {
+    // 如果正在检测中，在输入框附近显示加载状态（不使用页面正中央避免焦点问题）
+    if (isCheckingWriting && targetElement) {
+        const rect = targetElement.getBoundingClientRect();
         return (
             <div style={{
                 position: 'fixed',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
+                left: rect.left,
+                top: rect.bottom + 8,
                 zIndex: 2147483647,
                 backgroundColor: 'white',
                 borderRadius: '12px',
                 boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
-                padding: '16px 24px',
+                padding: '12px 16px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '12px'
+                gap: '10px',
+                pointerEvents: 'none'  // 确保不会抢夺焦点
             }}>
                 <div style={{
-                    width: '20px',
-                    height: '20px',
+                    width: '16px',
+                    height: '16px',
                     border: '2px solid #e5e7eb',
                     borderTopColor: '#3b82f6',
                     borderRadius: '50%',
                     animation: 'spin 0.8s linear infinite'
                 }} />
-                <span style={{ color: '#374151', fontSize: '14px' }}>
-                    正在检测写作质量...
+                <span style={{ color: '#6b7280', fontSize: '13px' }}>
+                    检测中...
                 </span>
                 <style>{`
                     @keyframes spin {

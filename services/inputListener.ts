@@ -295,20 +295,30 @@ async function handleKeydown(event: KeyboardEvent) {
 
     if (!isInput) return;
 
-    // Tab 键处理：无虚字时触发翻译或写作检测
+    // Tab 键处理：统一全局处理所有情况
     if (event.key === 'Tab') {
-        const { isVisible, ghostText } = useTranslationStore.getState();
+        const state = useTranslationStore.getState();
+        const { isVisible, ghostText, suggestions } = state;
 
-        // 1. 虚字可见：先阻止默认行为，再由 GhostText 组件处理（补全）
-        if (isVisible && ghostText) {
+        // === 优先级 1: 有建议弹窗时，一键应用所有建议 ===
+        if (suggestions && suggestions.length > 0) {
+            logger.log("Tab: Suggestions visible, applying all suggestions");
             event.preventDefault();
             event.stopImmediatePropagation();
-            // 直接调用 acceptGhost，因为 GhostText 的监听器可能来不及处理
-            useTranslationStore.getState().acceptGhost();
+            state.acceptAllSuggestions();
             return;
         }
 
-        // 2. 虚字不可见：检查文本内容
+        // === 优先级 2: 虚字可见时，补全虚影 ===
+        if (isVisible && ghostText) {
+            logger.log("Tab: Ghost text visible, accepting ghost");
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            state.acceptGhost();
+            return;
+        }
+
+        // === 优先级 3: 检测文本内容，触发翻译或AI辅导 ===
         logger.log("Tab pressed without ghost text, checking context...");
 
         let fullText = '';
@@ -319,22 +329,18 @@ async function handleKeydown(event: KeyboardEvent) {
             cursorPosition = deepTarget.selectionStart || fullText.length;
         } else if (deepTarget.isContentEditable) {
             fullText = getContentEditableText(deepTarget);
-            // 简化处理：contentEditable 暂取末尾，更精确的光标位置获取比较复杂
-            // TODO: 优化 contentEditable 的光标位置获取
             const selection = window.getSelection();
             if (selection && selection.rangeCount > 0) {
-                cursorPosition = fullText.length; // 暂时假设在末尾
+                cursorPosition = fullText.length;
             }
         }
 
         const textBeforeCursor = fullText.slice(0, cursorPosition);
         const textToCheck = textBeforeCursor.trimEnd();
 
-        // 提取最后一个片段进行检测（类似于原来的 Word 模式逻辑）
         const segments = textToCheck.split(/[\s,.!?;:，。！？：；]+/);
         const lastSegment = segments[segments.length - 1];
 
-        // 检测字符类型的辅助函数（支持字符串和单字符）
         const containsChinese = (str: string) => /[\u4e00-\u9fa5]/.test(str);
         const containsEnglish = (str: string) => /[a-zA-Z]/.test(str);
 
@@ -343,23 +349,16 @@ async function handleKeydown(event: KeyboardEvent) {
         let hasChinese = containsChinese(lastSegment);
         let hasEnglish = containsEnglish(lastSegment);
 
-        // 优化：如果 lastSegment 为空或没有有效字符，继续往前查找
         if (!hasChinese && !hasEnglish && textToCheck.length > 0) {
-            logger.log("lastSegment 无有效字符，向前查找...", { lastSegment });
-
-            // 从 textToCheck 的末尾向前查找，直到找到中文或英文字母
             for (let i = textToCheck.length - 1; i >= 0; i--) {
                 const char = textToCheck[i];
                 if (containsChinese(char)) {
                     hasChinese = true;
-                    logger.log("向前查找到中文字符:", char);
                     break;
                 } else if (containsEnglish(char)) {
                     hasEnglish = true;
-                    logger.log("向前查找到英文字符:", char);
                     break;
                 }
-                // 继续跳过符号和空格
             }
         }
 
@@ -369,7 +368,6 @@ async function handleKeydown(event: KeyboardEvent) {
             event.preventDefault();
 
             if (deepTarget instanceof HTMLInputElement || deepTarget instanceof HTMLTextAreaElement) {
-                // 使用空格判断句子/单词模式 (保持原有逻辑)
                 if (/\s/.test(textToCheck)) {
                     await handleWordTranslation(deepTarget);
                 } else {
@@ -385,7 +383,9 @@ async function handleKeydown(event: KeyboardEvent) {
 
         } else if (hasEnglish) {
             // === 英文 + Tab => AI 辅导 ===
-            // 安全检查：确保 chrome.storage 可用
+            // ⚠️ 必须在 async 操作前立即阻止默认行为，否则 Tab 焦点转移会先发生
+            event.preventDefault();
+
             if (typeof chrome === 'undefined' || !chrome.storage?.sync) {
                 logger.warn("chrome.storage.sync 不可用，跳过 AI 辅导");
                 return;
@@ -394,16 +394,13 @@ async function handleKeydown(event: KeyboardEvent) {
             const config = await getConfig();
             if (config.aiWritingAssistant) {
                 logger.log("Context: English detected, triggering AI Coaching");
-                event.preventDefault();
 
-                // 设置 targetElement 和插入位置
                 useTranslationStore.setState({
                     targetElement: deepTarget as any,
                     insertPosition: cursorPosition
                 });
 
-                // 触发写作检测
-                useTranslationStore.getState().triggerWritingCheck();
+                state.triggerWritingCheck();
             }
         } else {
             logger.log("Context: No specific trigger detected, allowing default Tab behavior");
