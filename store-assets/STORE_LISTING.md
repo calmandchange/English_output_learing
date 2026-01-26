@@ -7,8 +7,8 @@
 **英文**: Tap Tap Learn English - AI Translation & Learning Assistant
 
 ### 简短描述 (132字符限制)
-**中文**: 告别复制粘贴！在任意网页输入中文，Tab键即时生成地道英文。内置 AI 写作教练与学习数据分析，把每一次输入都变成英语提升的机会。
-**英文**: Stop copying & pasting! Type Chinese anywhere, Tab for instant native English. AI writing coach & learning insights included. Turn every input into a learning opportunity.
+**中文**: 在任意网页按 Tab，沉浸式英文阴影即刻浮现。这款连接意念与英语的桥梁，内置新时代最强 AI。不再被单词束缚，让每一次敲击都在提升自我，每一次辅导都深化对英语的理解。
+**英文**: Press Tab to translate Chinese to native English. Immersive AI coaching & analytics help you improve with every input.
 
 ### 详细描述 (Detailed Description)
 
@@ -64,12 +64,12 @@ English learning, AI writing, translation, vocabulary builder, grammar check, ty
 
 ## 权限说明 (Privacy Tab 填写)
 
-| 权限 | 英文说明 (填入商店) |
-|------|---------------------|
-| `activeTab` | Required to access selected text for translation ONLY when you trigger the extension via shortcut or context menu. |
-| `scripting` | Required to render the "Ghost Text" overlay and translation popups directly on the web page you are viewing. |
-| `storage` | Required to store your personal vocabulary, learning statistics, and preferences locally on your device. |
-| `Host Permissions` | Required to connect to translation services (Google, DeepSeek, Zhipu) to provide real-time translation. |
+| 权限               | 英文说明 (填入商店)                                                                                                |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `activeTab`        | Required to access selected text for translation ONLY when you trigger the extension via shortcut or context menu. |
+| `scripting`        | Required to render the "Ghost Text" overlay and translation popups directly on the web page you are viewing.       |
+| `storage`          | Required to store your personal vocabulary, learning statistics, and preferences locally on your device.           |
+| `Host Permissions` | Required to connect to translation services (Google, DeepSeek, Zhipu) to provide real-time translation.            |
 
 ### 远程代码声明
 ✅ "No, this extension does not use remote code."
@@ -78,10 +78,10 @@ English learning, AI writing, translation, vocabulary builder, grammar check, ty
 
 ## 视觉素材建议 (Visual Assets)
 
-| 素材 | 建议内容 |
-|------|----------|
-| **宣传图 (Promo)** | 核心标语："Type Chinese, Get English." 展示一个输入框正在变魔术般的翻译效果。 |
-| **截图 1 (Hero)** | **即时翻译流**：展示在 Gmail 或 Twitter 中输入中文 -> 虚影显示英文的过程。 |
-| **截图 2 (AI Coach)** | **AI 纠错**：展示 AI 指出"中式英语"并给出地道建议的对比。 |
-| **截图 3 (Insights)** | **数据面板**：展示漂亮的词汇增长曲线和连续打卡天数，激发下载欲。 |
-| **截图 4 (Settings)** | **多模型支持**：展示支持 DeepSeek/OpenAI/Google 的设置界面，体现专业性。 |
+| 素材                  | 建议内容                                                                      |
+| --------------------- | ----------------------------------------------------------------------------- |
+| **宣传图 (Promo)**    | 核心标语："Type Chinese, Get English." 展示一个输入框正在变魔术般的翻译效果。 |
+| **截图 1 (Hero)**     | **即时翻译流**：展示在 Gmail 或 Twitter 中输入中文 -> 虚影显示英文的过程。    |
+| **截图 2 (AI Coach)** | **AI 纠错**：展示 AI 指出"中式英语"并给出地道建议的对比。                     |
+| **截图 3 (Insights)** | **数据面板**：展示漂亮的词汇增长曲线和连续打卡天数，激发下载欲。              |
+| **截图 4 (Settings)** | **多模型支持**：展示支持 DeepSeek/OpenAI/Google 的设置界面，体现专业性。      |

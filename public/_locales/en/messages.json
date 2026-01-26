@@ -4,7 +4,7 @@
         "description": "Name of the extension"
     },
     "extensionDescription": {
-        "message": "Learn English through outputting.",
+        "message": "Press Tab to translate Chinese to native English. Immersive AI coaching & analytics help you improve with every input.",
         "description": "Description of the extension"
     }
 }
